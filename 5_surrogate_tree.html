@@ -1,0 +1,711 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<script>
+(function(){var KEY='it3_lang',AVAILABLE=['ko'],LANGS=['ko','en','zh','ja','uz','ru'];
+var cur=document.documentElement.lang||'ko';cur=cur.slice(0,2);
+function root(){var p=location.pathname;var dir=p.replace(/[^\/]*$/,'');if(cur!=='ko'){dir=dir.replace(/[^\/]+\/$/,'')}return dir}
+function file(){var f=location.pathname.split('/').pop();if(!f)f='index.html';if(!/\.html?$/.test(f))f+='.html';return f}
+function url(l){return root()+(l==='ko'?'':l+'/')+file()+location.search.replace(/[?&]lang=[^&]*/,'').replace(/^&/,'?')+location.hash}
+function exists(u,cb){if(location.protocol==='file:'){cb(true);return}try{fetch(u,{method:'HEAD'}).then(function(r){cb(!(r.status===404||r.status===410))},function(){cb(true)})}catch(e){cb(true)}}
+function save(l){try{localStorage.setItem(KEY,l)}catch(e){}}
+function drop(){try{localStorage.removeItem(KEY)}catch(e){}}
+window.itSetLang=function(l,manual){if(l===cur)return;
+ if(AVAILABLE.indexOf(l)<0){if(manual){var n=document.getElementById('lang-note');if(n){n.hidden=false;n.textContent='이 언어판은 아직 준비 중입니다 ('+l+'). 한국어판을 보여 드립니다.'}}else{drop()}return}
+ var u=url(l);exists(u,function(ok){if(ok){if(manual)save(l);location.href=u}else{drop();if(manual){var n=document.getElementById('lang-note');if(n){n.hidden=false;n.textContent='언어판 파일을 찾지 못했습니다: '+u}}}})};
+var q=(location.search.match(/[?&]lang=([a-z]{2})/)||[])[1];
+if(q&&LANGS.indexOf(q)>=0){save(q);if(q!==cur)itSetLang(q,true);return}
+var s=null;try{s=localStorage.getItem(KEY)}catch(e){}
+if(s&&s!==cur){itSetLang(s,false);return}
+if(!s){var b=(navigator.language||'ko').slice(0,2);if(b!==cur&&AVAILABLE.indexOf(b)>=0)itSetLang(b,false)}
+})();
+</script>
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>5편 · 최고 모델을 흉내 내는 나무 | 인슈어테크 #3</title>
+<meta name="description" content="AI(인공지능) x 비즈니스 #1 인슈어테크_03_회귀모델 5편. 최종 모델의 예측을 정답 삼아 작은 회귀나무를 학습시켜, 잎 6개 규칙표로 충실도 0.961 를 낸다.">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=Silkscreen&display=swap">
+<style>
+.say .av:has(img){background:#fff}
+.say .av img{display:block}
+img.scene{display:block;width:100%;max-width:720px;height:auto;aspect-ratio:9/5;object-fit:cover;border-radius:var(--r)}
+img.keyvis{display:block;width:100%;height:auto;aspect-ratio:1100/320;object-fit:cover;border-radius:var(--r)}
+img.pic{display:block;width:100%;height:auto;aspect-ratio:480/440;object-fit:cover;border-radius:6px}
+.crew .cf{background:#fff}
+.crew .cf img{width:100%;height:100%;object-fit:contain}
+.crew .moods button img{width:36px;height:36px;border-radius:7px;display:block}
+/* 레이아웃: 보상 센터 연구 노트 — 상단 바 · 히어로(그림 자리) · 육각 번호 섹션 · 카드형 실습 */
+:root{
+  --bg:#f6f5fb; --surface:#ffffff; --sunken:#eeecf7; --ink:#1d1a2e; --muted:#5d5873; --line:#dcd8ea;
+  --accent:#5b47c9; --accent-ink:#ffffff; --accent-soft:#ece8ff;
+  --core:#6a4fd8; --data:#c2417a; --seq:#13857f;
+  --c-no:#2f86c9; --c-claim:#d9730d; --c-3:#7b61d9; --c-4:#1f9e78;
+  --risk:#b4471b; --risk-bg:#fdeee6; --safe:#1f7a5c; --safe-bg:#e5f4ee; --warn:#9a620e; --warn-bg:#fbf1df;
+  --grid:#e6e3f0;
+  --f-body:"IBM Plex Sans KR","Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,"SFMono-Regular",Menlo,Consolas,monospace;
+  --f-pixel:"Silkscreen","IBM Plex Mono",monospace;
+  --r:8px;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#12111a; --surface:#1b1a26; --sunken:#0e0d15; --ink:#ece9f7; --muted:#a29dba; --line:#2e2b40;
+  --accent:#a998ff; --accent-ink:#14121f; --accent-soft:#2a2547;
+  --core:#a48cf0; --data:#f07aaa; --seq:#4cc3b9;
+  --c-no:#3f8fd2; --c-claim:#d8742a; --c-3:#8a74e0; --c-4:#26a17c;
+  --risk:#f08a5d; --risk-bg:#3a1f16; --safe:#5fcf9f; --safe-bg:#14302a; --warn:#e3aa52; --warn-bg:#33270f;
+  --grid:#2a2738; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --grid:#2a2738; color-scheme:dark}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html{scroll-behavior:smooth}
+@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:16px;line-height:1.7;word-break:keep-all;overflow-wrap:break-word}
+a{color:var(--accent)}
+h1,h2,h3{line-height:1.3;text-wrap:balance;margin:0}
+p{margin:0}
+code,pre,.mono{font-family:var(--f-mono)}
+.num{font-variant-numeric:tabular-nums}
+.wrap{max-width:1000px;margin:0 auto;padding-inline:20px}
+nav.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:20;background:color-mix(in srgb,var(--bg) 92%,transparent);backdrop-filter:blur(6px);border-bottom:1px solid var(--line)}
+nav.top .wrap{display:flex;align-items:center;gap:6px 14px;flex-wrap:wrap;padding-block:8px}
+nav.top .brand{font-weight:700;text-decoration:none;color:var(--ink);white-space:nowrap}
+nav.top .brand b{font-family:var(--f-pixel);font-weight:400;color:var(--accent);margin-left:4px}
+nav.top .links{display:flex;gap:2px 12px;flex-wrap:wrap;font-size:.86rem;flex:1;min-width:0}
+nav.top .links a{color:var(--muted);text-decoration:none}
+nav.top .links a:hover{color:var(--ink)}
+nav.top select{width:auto;font:inherit;font-size:.82rem;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:3px 6px}
+header.hero{padding-block:28px 20px}
+.hero-grid{display:grid;gap:18px}
+.series{display:flex;flex-wrap:wrap;gap:6px}
+.series a{font-size:.78rem;text-decoration:none;color:var(--muted);border:1px solid var(--line);border-radius:999px;padding:2px 10px;background:var(--surface)}
+.series a.on{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:600}
+.kicker{font-family:var(--f-pixel);font-size:.82rem;color:var(--accent);letter-spacing:.04em}
+h1{font-size:clamp(1.7rem,4.2vw,2.5rem);font-weight:700;letter-spacing:-.015em}
+.lead{font-size:1.06rem;color:var(--muted);max-width:68ch}
+.byline{font-size:.84rem;color:var(--muted)}
+.guide{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:.82rem;color:var(--muted)}
+.guide span::before{content:"";display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px;vertical-align:-1px;background:var(--c)}
+.chat{display:grid;gap:10px;max-width:760px}
+.say{display:flex;gap:12px;align-items:flex-start}
+.say .av{flex:0 0 52px;height:52px;border-radius:12px;display:grid;place-items:center;font-weight:700;font-size:1.05rem;color:var(--accent-ink);background:var(--avc,var(--accent));position:relative;overflow:hidden}
+.say .av img{width:100%;height:100%;object-fit:cover;object-position:50% 18%}
+.say .av small{position:absolute;bottom:2px;left:0;right:0;font-size:.55rem;font-weight:500;text-align:center;opacity:.85}
+.say .sbub{background:var(--surface);border:1px solid var(--line);border-radius:4px 14px 14px 14px;padding:8px 14px;min-width:0}
+.say .sbub b{font-size:.8rem;color:var(--muted);display:block}
+.say .sbub ul{margin:4px 0 0;padding-left:1.2em}
+.npc{display:inline-block;margin-left:6px;font-family:var(--f-pixel);font-size:.62rem;font-weight:400;letter-spacing:.06em;color:#3a2a00;background:#f2c94c;border:1px solid #b8901a;border-radius:3px;padding:0 5px;vertical-align:1px}
+.bomi{--avc:#d9730d}.actuary{--avc:#5b47c9}.fly{--avc:#13857f}.robo{--avc:#2f86c9}
+section.part{padding-block:34px 10px;border-top:1px solid var(--line);margin-top:26px}
+.part-head{display:grid;grid-template-columns:auto 1fr;gap:6px 14px;align-items:center;margin-bottom:16px}
+.hex{width:44px;height:50px;clip-path:polygon(50% 0,100% 25%,100% 75%,50% 100%,0 75%,0 25%);background:var(--kc,var(--accent));color:#fff;display:grid;place-items:center;font-family:var(--f-pixel);font-size:1.05rem;grid-row:span 2}
+.part-head h2{font-size:1.4rem}
+.part-head h2 span.en{font-family:var(--f-pixel);font-weight:400;font-size:.72rem;color:var(--muted);margin-left:8px;letter-spacing:.03em}
+.part-head p{color:var(--muted);font-size:.94rem}
+.body{display:grid;gap:16px;grid-template-columns:minmax(0,1fr)}
+.body>p,.body>ul,.body>ol{max-width:72ch}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:16px 18px;display:grid;gap:12px;min-width:0}
+.card h3{font-size:1.02rem}
+.cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,280px),1fr));gap:14px}
+.tblwrap{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:.88rem}
+th,td{padding:6px 10px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+th{font-size:.76rem;color:var(--muted);font-weight:600;letter-spacing:.02em;white-space:nowrap}
+td.r,th.r{text-align:right;font-variant-numeric:tabular-nums}
+tr.hl td{background:var(--accent-soft);font-weight:600}
+.btns{display:flex;flex-wrap:wrap;gap:8px}
+button{font:inherit}
+.btn{text-decoration:none;display:inline-block;font-size:.9rem;font-weight:600;border-radius:8px;padding:7px 14px;cursor:pointer;border:1px solid var(--line);background:var(--surface);color:var(--ink)}
+.btn:hover{border-color:var(--accent)}
+.btn[aria-pressed="true"],.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.btn.small{font-size:.8rem;padding:3px 10px}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.dial{display:grid;gap:4px;min-width:0;align-content:start}
+.dial label{font-size:.86rem;font-weight:500;display:flex;justify-content:space-between;gap:8px}
+.dial label output{font-family:var(--f-mono);color:var(--accent)}
+input[type=range]{width:100%;accent-color:var(--accent)}
+select,input[type=text],input[type=number]{font:inherit;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:6px 8px;width:100%;min-width:0}
+.canvas-box{position:relative;min-width:0}
+.canvas-box canvas{width:100%;display:block;border:1px solid var(--line);border-radius:6px;background:var(--surface)}
+.cap{font-size:.86rem;color:var(--muted)}
+.cap b{color:var(--ink)}
+.legend{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:.8rem;color:var(--muted)}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:5px;vertical-align:-1px;background:var(--c)}
+.tip{position:absolute;pointer-events:none;background:var(--ink);color:var(--bg);font-size:.76rem;padding:4px 8px;border-radius:6px;white-space:nowrap;transform:translate(-50%,-120%);z-index:5}
+.stat{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,130px),1fr));gap:8px}
+.stat>div{background:var(--sunken);border-radius:6px;padding:8px 12px;display:grid}
+.stat .l{font-size:.74rem;color:var(--muted)}
+.stat .v{font-size:1.25rem;font-weight:600;font-variant-numeric:tabular-nums}
+.bars{display:grid;gap:8px}
+.bar{display:grid;grid-template-columns:6.5em 1fr 4.2em;gap:8px;align-items:center;font-size:.84rem}
+.bar .track{position:relative;height:16px;background:var(--sunken);border-radius:4px}
+.bar .fill{position:absolute;left:0;top:0;bottom:0;border-radius:0 4px 4px 0;background:var(--c,var(--accent));transition:width .25s}
+.bar .base{position:absolute;top:-4px;bottom:-4px;width:2px;background:var(--ink)}
+.bar .v{font-family:var(--f-mono);text-align:right}
+@media (prefers-reduced-motion:reduce){.bar .fill{transition:none}}
+.cm{display:grid;grid-template-columns:auto 1fr 1fr;gap:6px;max-width:440px;font-variant-numeric:tabular-nums}
+.cm .h{font-size:.76rem;color:var(--muted);font-weight:600;display:flex;align-items:end;padding:2px 4px}
+.cm .rh{align-items:center}
+.cm .c{border:1px solid var(--line);border-radius:6px;padding:8px 10px;display:grid;background:var(--surface)}
+.cm .c b{font-size:1.15rem}
+.cm .c span{font-size:.74rem;color:var(--muted)}
+.cm .c.ok{background:var(--safe-bg);border-color:transparent}
+.cm .c.bad{background:var(--risk-bg);border:2px solid var(--risk)}
+.cm .c.bad span{color:var(--risk);font-weight:600}
+.pill{display:inline-block;font-size:.74rem;font-weight:600;padding:1px 8px;border-radius:999px;white-space:nowrap}
+.pill.risk{background:var(--risk-bg);color:var(--risk)}.pill.safe{background:var(--safe-bg);color:var(--safe)}.pill.warn{background:var(--warn-bg);color:var(--warn)}
+.pill.pass{background:var(--safe-bg);color:var(--safe)}.pill.fail{background:var(--risk-bg);color:var(--risk)}
+.note{border-left:3px solid var(--warn);background:var(--warn-bg);padding:8px 14px;border-radius:0 6px 6px 0;font-size:.9rem}
+.note.info{border-color:var(--accent);background:var(--accent-soft)}
+.q{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:14px 18px;display:grid;gap:10px}
+.q .qt{font-weight:600}
+.q .opts{display:grid;gap:6px}
+.q .opts button{text-align:left;font-size:.92rem;border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:8px;padding:8px 12px;cursor:pointer}
+.q .opts button.right{border-color:var(--safe);background:var(--safe-bg)}
+.q .opts button.wrong{border-color:var(--risk);background:var(--risk-bg)}
+.q .fb{font-size:.9rem}
+.codebox{border:1px solid var(--line);border-radius:var(--r);overflow:hidden;background:var(--surface)}
+.codebox .tabs{display:flex;flex-wrap:wrap;gap:2px;border-bottom:1px solid var(--line);background:var(--sunken);padding:6px 6px 0}
+.codebox .tabs button{border:0;background:none;padding:6px 12px;border-radius:6px 6px 0 0;cursor:pointer;color:var(--muted);font-size:.84rem;font-family:var(--f-mono)}
+.codebox .tabs button[aria-selected="true"]{background:var(--surface);color:var(--ink);font-weight:500}
+.codebox .tools{display:flex;flex-wrap:wrap;gap:6px;padding:8px 10px;border-bottom:1px solid var(--line);align-items:center}
+.codebox .tools span{font-size:.78rem;color:var(--muted);flex:1;min-width:12em}
+.codebox pre{margin:0;padding:14px 16px;overflow:auto;max-height:440px;font-size:.8rem;line-height:1.55;white-space:pre}
+details.run{border:1px solid var(--line);border-radius:var(--r);background:var(--sunken)}
+details.run summary{cursor:pointer;padding:8px 14px;font-size:.88rem;font-weight:500}
+details.run pre{margin:0;padding:10px 16px 14px;overflow:auto;font-size:.78rem;line-height:1.5}
+.gloss{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr));gap:10px}
+.gloss div{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:10px 14px}
+.gloss dt{font-weight:600}.gloss dd{margin:2px 0 0;font-size:.88rem;color:var(--muted)}
+.gloss dd i{font-style:normal;color:var(--ink)}
+.prompt pre{white-space:pre-wrap;overflow-wrap:anywhere;background:var(--sunken);border:1px solid var(--line);border-radius:var(--r);padding:14px 16px;font-size:.8rem;max-height:360px;overflow:auto;margin:0}
+.teach-link{display:inline-block;font-weight:600;text-decoration:none;border:1px solid var(--accent);border-radius:8px;padding:8px 14px}
+section.outro{margin-top:40px;padding-block:30px;border-top:1px solid var(--line)}
+.outro .scene{width:100%;max-width:720px;aspect-ratio:720/400;border-radius:var(--r)}
+.placeholder{display:grid;place-items:center;text-align:center;background:repeating-linear-gradient(135deg,var(--sunken) 0 12px,var(--surface) 12px 24px);border:1px dashed var(--line);color:var(--muted);font-size:.82rem;padding:10px}
+.nav-eps{display:flex;flex-wrap:wrap;gap:8px;justify-content:space-between}
+footer{border-top:1px solid var(--line);margin-top:30px;padding-block:22px 40px;font-size:.82rem;color:var(--muted)}
+footer .wrap{display:grid;gap:8px}
+.robo-w{align-items:center}
+.robo-w .av{flex-basis:64px;height:64px;font-size:1.4rem}
+.robo-w[data-st="wrong"] .av{--avc:var(--risk)}
+.robo-w[data-st="success"] .av{--avc:var(--safe)}
+.robo-w[data-st="confused"] .av{--avc:var(--warn)}
+.player{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.player input[type=range]{flex:1;min-width:140px}
+.stamp{justify-self:start;border:3px double currentColor;border-radius:4px;padding:6px 16px;font-weight:700;font-size:1.35rem;letter-spacing:.04em;transform:rotate(-2deg)}
+.stamp.risk{color:var(--risk)}.stamp.safe{color:var(--safe)}.stamp.reject{color:var(--warn)}
+@media (max-width:560px){body{font-size:15px}.part-head h2{font-size:1.2rem}.say .av{flex-basis:44px;height:44px}}
+.tagx{display:inline-block;font-size:.72rem;font-weight:600;background:var(--sunken);border-radius:4px;padding:0 6px;margin-right:4px;color:var(--muted)}
+.crewgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,210px),1fr));gap:14px}
+.crew{align-content:start}
+.crew .faces{position:relative;aspect-ratio:4/3;width:100%;overflow:hidden;border-radius:var(--r)}
+.crew .cf{position:absolute;inset:0;display:none;border-radius:var(--r);flex-direction:column;gap:4px}
+.crew .cf.on{display:grid;align-content:center}
+.crew .moods{display:flex;flex-wrap:wrap;gap:6px}
+.crew .moods button{width:44px;height:44px;border-radius:10px;border:2px solid var(--line);background:var(--sunken);cursor:pointer;display:grid;place-items:center;padding:0;line-height:1.1;color:var(--avc)}
+.crew .moods button small{font-size:.58rem;color:var(--muted)}
+.crew .moods button[aria-pressed="true"]{border-color:var(--avc)}
+.cline{font-weight:500}
+.keyvis{width:100%;aspect-ratio:1100/320;border-radius:var(--r)}
+.stops{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,290px),1fr));gap:14px}
+.stop{border-top:4px solid var(--kc)}
+.stop .pic{aspect-ratio:480/440;border-radius:6px}
+.stop .no{font-family:var(--f-pixel);color:var(--kc)}
+.bigq{font-size:1.15rem;font-weight:600;border-left:4px solid var(--accent);padding:6px 14px;background:var(--accent-soft);border-radius:0 8px 8px 0;max-width:72ch}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:16px 18px;display:grid;gap:12px;min-width:0;align-content:start}
+.task{border:1px solid var(--line);border-left:4px solid var(--data);background:var(--surface);border-radius:0 var(--r) var(--r) 0;padding:14px 18px;display:grid;gap:8px}
+.task .tt{font-family:var(--f-pixel);font-size:.8rem;color:var(--data)}
+.task ul{margin:0;padding-left:1.2em}
+.answer{border:2px dashed var(--accent);border-radius:var(--r);padding:14px 18px;display:grid;gap:10px;background:var(--surface)}
+.answer .tt{font-weight:700;color:var(--accent)}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chips span{font-size:.76rem;border:1px solid var(--line);border-radius:999px;padding:1px 9px;background:var(--sunken)}
+.chips span.ban{border-color:var(--risk);color:var(--risk);background:var(--risk-bg)}
+
+:root{--c-under:var(--c-claim);--c-over:var(--c-no)}
+.say .sbub p b,.say .sbub li b,.say .sbub p strong{display:inline;font-size:inherit;color:inherit}
+.review{text-decoration:none;color:inherit;border-left:4px solid var(--seq)}
+.review:hover{border-color:var(--accent)}
+.scene.placeholder{width:100%;max-width:720px;aspect-ratio:9/5;border-radius:var(--r)}
+.keyvis.placeholder{width:100%;aspect-ratio:1100/320;border-radius:var(--r)}
+.pic.placeholder{width:100%;aspect-ratio:720/660;border-radius:6px}
+.otherpart{font-size:.78rem;text-decoration:none;border:1px dashed var(--seq);color:var(--seq);border-radius:999px;padding:2px 10px;background:var(--surface)}
+.box{border:1px solid var(--seq);background:var(--surface);border-radius:var(--r);padding:14px 18px;display:grid;gap:8px}
+.box .tt{font-family:var(--f-pixel);font-size:.78rem;color:var(--seq)}
+.form{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,150px),1fr));gap:10px}
+.form label{display:grid;gap:3px;font-size:.84rem;font-weight:500}
+.path{display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:.86rem}
+.path span{border:1px solid var(--line);border-radius:6px;padding:2px 8px;background:var(--sunken)}
+.path span.leaf{background:var(--accent-soft);border-color:var(--accent);font-weight:600}
+.drop{border:2px dashed var(--line);border-radius:var(--r);padding:18px;text-align:center;color:var(--muted);font-size:.9rem}
+.drop.on{border-color:var(--accent);background:var(--accent-soft)}
+.big{font-size:1.6rem;font-weight:700;font-variant-numeric:tabular-nums}
+.mono{overflow-wrap:anywhere}
+@media (max-width:640px){nav.top .links{order:3;flex-basis:100%}}
+td.r.under{color:var(--c-under);font-weight:600}td.r.over{color:var(--c-over)}
+
+</style>
+</head>
+<body>
+<nav class="top"><div class="wrap"><a class="brand" href="index.html">인슈어테크 #3<b>· 5</b></a><div class="links"><a href="#teacher">대리모델</a><a href="#dial">잎 수 다이얼</a><a href="#rules">규칙표</a><a href="#compare">직접 나무와 비교</a><a href="#check">확인 문제</a><a href="#practice">실무로 잇기</a><a href="#prompt">프롬프트</a><a href="#glossary">용어</a><a href="answers.html#a5">교육자용 정답</a></div><a class="otherpart" href="https://adminmrobo.github.io/ai-biz-insurtech-04/">2부 실전편 →</a><select id="lang-sel" aria-label="언어 선택" onchange="itSetLang(this.value,true)"><option value="ko" selected>한국어</option><option value="en">English</option><option value="zh">中文</option><option value="ja">日本語</option><option value="uz">O'zbekcha</option><option value="ru">Русский</option></select></div></nav><header class="hero"><div class="wrap hero-grid"><div class="series" aria-label="시리즈 편 목록"><a href="1_charges_question.html" class="">1 평균의 함정</a><a href="2_data_cleaning.html" class="">2 꼬리 지키기</a><a href="3_five_models.html" class="">3 모델 다섯</a><a href="4_margin_lab.html" class="">4 여유분 실험실</a><a href="5_surrogate_tree.html" class="on" aria-current="page">5 대리모델</a><a href="6_quote_app.html" class="">6 견적 앱</a><a class="otherpart" href="https://adminmrobo.github.io/ai-biz-insurtech-04/">↔ 2부 실전편 (인슈어테크 #4 실전)</a></div><p class="kicker">EPISODE 5 · 해설형 · Surrogate tree</p>
+<h1>최고 모델을 흉내 내는 나무</h1><p class="lead">최종 모델(그래디언트 부스팅)은 나무 200그루의 합이라 종이에 옮길 수 없습니다. 그 모델의 <b>예측</b>을 정답 삼아 작은 회귀나무를 학습시키면, 잎 <b>6개</b>짜리 규칙표가 시험 고객에게 선생님과 거의 같은 견적(충실도 R² <b>0.961</b>)을 냅니다.</p><div class="chat"><div class="say bomi"><div class="av" data-face="curious" aria-hidden="true"><img src="assets/av_bomi_curious.webp" alt="" width="160" height="160" loading="lazy"></div><div class="sbub"><b>조교</b><p>최종 모델이 MAE $2,470 이면 그대로 쓰면 되잖아요. 왜 또 나무를 키워요?</p></div></div><div class="say actuary"><div class="av" data-face="explain" aria-hidden="true"><img src="assets/av_actuary_explain.webp" alt="" width="160" height="160" loading="lazy"></div><div class="sbub"><b>박사<span class="npc" title="NPC">NPC</span></b><p>(손바닥을 든다) …그 모델은 나무 200그루를 더한 계산입니다. 상담 창구에서 종이 한 장으로는 못 따라 합니다. 그래서 그 모델의 <b>답</b>을 정답 삼아, 종이에 적을 수 있는 작은 나무가 흉내 내게 합니다.</p></div></div><div class="say fly"><div class="av" data-face="side" aria-hidden="true"><img src="assets/av_fly_side.webp" alt="" width="160" height="160" loading="lazy"></div><div class="sbub"><b>초파리 연구원</b><p>선생님 답을 베끼는 학생 나무군요. 저도 과일 고를 때 옆 초파리 따라 해요.</p></div></div></div><p class="byline">글 · 안상선 ((주)M-Robo 대표) · AI(인공지능) x 비즈니스 #1 인슈어테크_03_회귀모델</p><div class="guide"><span style="--c:var(--c-3)">학생 나무 예측</span><span style="--c:var(--c-under)">고액 오차</span><span style="--c:var(--c-4)">실제값 MAE</span><span style="--c:var(--ink)">선생님(GBM)</span></div></div></header><main><section class="part" id="teacher"><div class="wrap"><div class="part-head" style="--kc:var(--core)"><div class="hex">1</div><h2>선생님 모델과 학생 나무<span class="en">Surrogate model</span></h2><p>정답이 아니라 선생님의 답을 배운다.</p></div><div class="body"><div class="stat"><div><span class="l">선생님 (GBM) MAE</span><span class="v">$2,470</span></div><div><span class="l">선생님 R²</span><span class="v">0.860</span></div><div><span class="l">선생님 나무 수</span><span class="v">200그루</span></div><div><span class="l">학생 나무 (최종)</span><span class="v">잎 6개</span></div></div><p><b>대리모델(surrogate)</b>은 복잡한 모델이 학습 데이터 1,069명에게 낸 <b>예측값</b>을 정답 삼아 배운 단순한 모델입니다. 실제 의료비에는 우연한 큰 청구 같은 잡음이 섞여 있지만, 선생님의 예측은 이미 잡음을 걸러 낸 매끈한 답이라 작은 나무가 따라 하기 쉽습니다.</p><div class="cols"><div class="card"><h3>충실도 (fidelity)</h3><p>학생이 선생님과 <b>얼마나 같은 말</b>을 하나. 시험 268명에서 GBM 예측과의 R² · MAE. 1 에 가까울수록 선생님과 같은 견적.</p></div><div class="card"><h3>정확도</h3><p>학생이 <b>실제 의료비</b>를 얼마나 맞히나. MAE · 고액 MAE. 선생님보다 좋아질 수는 없다고 보는 것이 보통입니다.</p></div><div class="card"><h3>읽기 쉬움</h3><p>잎(규칙) 수. 종이 한 장에 적고, 상담원이 30초 안에 따라 갈 수 있어야 합니다.</p></div></div></div></div></section><section class="part" id="dial"><div class="wrap"><div class="part-head" style="--kc:var(--seq)"><div class="hex">2</div><h2>잎 수 다이얼<span class="en">Leaves vs fidelity</span></h2><p>잎을 늘리면 충실도는 오르고, 종이는 길어집니다.</p></div><div class="body"><div class="dial"><label for="l-dial">잎(규칙) 수 <output id="l-dial-o">6개</output></label><input type="range" id="l-dial" min="2" max="16" step="1" value="6"></div><div class="cols"><div class="card"><h3>선생님 예측 × 학생 예측 (시험 268명)</h3><div class="canvas-box"><canvas id="fid-cv" aria-label="GBM 예측과 대리 나무 예측 점 그림"></canvas></div><p class="cap">대각선에 붙을수록 충실도가 높습니다. 학생 나무는 잎 수만큼의 금액만 말할 수 있어 점이 가로줄로 섭니다.</p></div><div class="card"><h3>점수</h3><div class="bars"><div class="bar" id="b-fid" style="grid-template-columns:7em 1fr 5em;--c:var(--c-3)"><span>충실도 R²</span><div class="track"><div class="fill"></div><div class="base"></div></div><span class="v"></span></div><div class="bar" id="b-mae" style="grid-template-columns:7em 1fr 5em;--c:var(--c-4)"><span>실제 MAE</span><div class="track"><div class="fill"></div><div class="base"></div></div><span class="v"></span></div><div class="bar" id="b-top" style="grid-template-columns:7em 1fr 5em;--c:var(--c-under)"><span>고액 MAE</span><div class="track"><div class="fill"></div><div class="base"></div></div><span class="v"></span></div></div><p class="cap">세로선 = 선생님(GBM): R² 1(자기 자신), MAE $2,470, 고액 MAE $3,612. MAE 막대는 $8,000 을 끝으로 그림.</p><p class="cap" id="dial-cap" aria-live="polite"></p><div class="say robo robo-w" id="robo-5" data-st="idle" aria-live="polite"><div class="av" data-rs="idle" aria-hidden="true"><img src="assets/av_robo_idle.webp" alt="" width="160" height="160" loading="lazy"></div><div class="av" data-rs="thinking" hidden aria-hidden="true"><img src="assets/av_robo_thinking.webp" alt="" width="160" height="160" loading="lazy"></div><div class="av" data-rs="wrong" hidden aria-hidden="true"><img src="assets/av_robo_wrong.webp" alt="" width="160" height="160" loading="lazy"></div><div class="av" data-rs="confused" hidden aria-hidden="true"><img src="assets/av_robo_confused.webp" alt="" width="160" height="160" loading="lazy"></div><div class="av" data-rs="success" hidden aria-hidden="true"><img src="assets/av_robo_success.webp" alt="" width="160" height="160" loading="lazy"></div><div class="sbub"><b>머니로보</b><p data-rs="idle">대기 중.</p><p data-rs="thinking" hidden>삐빅, 규칙 세는 중…</p><p data-rs="wrong" hidden>잎이 너무 적어요. 고액 고객을 크게 적게 잡아요!</p><p data-rs="confused" hidden>규칙이 너무 많아 종이 두 장이에요… 상담원이 길을 잃어요.</p><p data-rs="success" hidden>삐빅! 충실도 0.95 넘김, 종이 한 장 안에 들어가요.</p></div></div></div></div><h3 id="rules-h">규칙표</h3><div class="tblwrap"><table id="rules-t"><thead><tr><th>#</th><th>조건</th><th class="r">견적</th><th class="r">학습 인원</th></tr></thead><tbody></tbody></table></div></div></div></section><section class="part" id="rules"><div class="wrap"><div class="part-head" style="--kc:var(--data)"><div class="hex">3</div><h2>최종 규칙표: 잎 6개<span class="en">The rule sheet</span></h2><p>학습 데이터만으로 정한 최종 대리모델.</p></div><div class="body"><p>잎 수는 <b>학습 데이터 5-Fold 충실도(R²)가 0.95 이상인 가장 작은 나무</b>로 정했습니다(시험 데이터는 보지 않음). 잎 6개의 학습 CV 충실도는 0.9508, 시험 충실도는 0.9607 입니다. 이 규칙표를 <a href="data/surrogate_tree.json">data/surrogate_tree.json</a> 으로 저장해 6편 견적 앱이 그대로 씁니다.</p><div class="tblwrap"><table><thead><tr><th>#</th><th>조건</th><th class="r">견적</th><th class="r">학습 인원</th></tr></thead><tbody><tr><td>1</td><td>비흡연자 · 나이 ≤ 42.5</td><td class="r">$5,452.28</td><td class="r">474</td></tr><tr><td>2</td><td>비흡연자 · 나이 > 42.5 · 나이 ≤ 58.5</td><td class="r">$11,303.73</td><td class="r">289</td></tr><tr><td>3</td><td>비흡연자 · 나이 > 42.5 · 나이 > 58.5</td><td class="r">$15,311.21</td><td class="r">92</td></tr><tr><td>4</td><td>흡연자 · BMI ≤ 30.01</td><td class="r">$21,338.87</td><td class="r">98</td></tr><tr><td>5</td><td>흡연자 · BMI > 30.01 · 나이 ≤ 41.5</td><td class="r">$38,310.21</td><td class="r">62</td></tr><tr><td>6</td><td>흡연자 · BMI > 30.01 · 나이 > 41.5</td><td class="r">$45,151.25</td><td class="r">54</td></tr></tbody></table></div><div class="say actuary"><div class="av" data-face="note" aria-hidden="true"><img src="assets/av_actuary_note.webp" alt="" width="160" height="160" loading="lazy"></div><div class="sbub"><b>박사<span class="npc" title="NPC">NPC</span></b><p>(손바닥을 든다) …첫 질문이 <b>흡연 여부</b>입니다. 1편의 숨은 열쇠가 나무 꼭대기로 돌아왔습니다. 흡연자 쪽 다음 질문은 <b>BMI 30.01</b>, 1편의 맨 위 띠(흡연 + BMI 30 이상)와 같은 자리입니다. 비흡연자 쪽은 나이로만 나뉩니다.</p></div></div><p class="note info">이 규칙표가 쓰는 열은 <b>나이, BMI, 흡연 여부</b> 뿐입니다. 성별(sex) · 지역(region)은 쓰지 않습니다. 원 모델(GBM)은 쓰고 있으며, 그 차이는 6편에서 셉니다.</p></div></div></section><section class="part" id="compare"><div class="wrap"><div class="part-head" style="--kc:var(--data)"><div class="hex">4</div><h2>직접 배운 나무와 비교<span class="en">Surrogate vs direct tree</span></h2><p>같은 잎 수로 실제 charges 를 직접 배우면?</p></div><div class="body"><div class="tblwrap"><table><thead><tr><th>잎 수</th><th class="r">대리 충실도 R²</th><th class="r">대리 MAE</th><th class="r">직접 MAE</th><th class="r">대리 고액 MAE</th><th class="r">직접 고액 MAE</th></tr></thead><tbody><tr><td>2</td><td class="r">0.6999</td><td class="r">$5,753</td><td class="r">$5,750</td><td class="r">$10,237</td><td class="r">$10,123</td></tr><tr><td>3</td><td class="r">0.8791</td><td class="r">$4,476</td><td class="r">$4,476</td><td class="r">$5,382</td><td class="r">$5,392</td></tr><tr><td>4</td><td class="r">0.9441</td><td class="r">$3,403</td><td class="r">$3,399</td><td class="r">$5,242</td><td class="r">$5,251</td></tr><tr class="hl"><td>6</td><td class="r">0.9607</td><td class="r">$3,113</td><td class="r">$3,109</td><td class="r">$4,140</td><td class="r">$4,259</td></tr><tr><td>8</td><td class="r">0.9744</td><td class="r">$2,839</td><td class="r">$2,850</td><td class="r">$4,111</td><td class="r">$4,293</td></tr><tr><td>12</td><td class="r">0.9809</td><td class="r">$2,716</td><td class="r">$2,757</td><td class="r">$4,287</td><td class="r">$4,555</td></tr><tr><td>16</td><td class="r">0.9843</td><td class="r">$2,646</td><td class="r">$2,637</td><td class="r">$4,051</td><td class="r">$4,555</td></tr></tbody></table></div><p class="cap">시험 268명. 고액 = 실제 의료비 상위 10%.</p><p>정직하게 읽으면, 이 데이터에서는 대리 나무와 직접 배운 나무의 MAE 가 거의 같습니다(잎 6개: $3,113 vs $3,109). 데이터가 단순해(흡연 · BMI · 나이) 직접 배워도 같은 갈림길을 찾기 때문입니다. 차이는 <b>고액 고객</b>에서 보입니다. 잎 7개 이상에서는 대리 나무의 고액 MAE 가 더 작습니다(잎 8개: $4,111 vs $4,293).</p><div class="say bomi"><div class="av" data-face="worried" aria-hidden="true"><img src="assets/av_bomi_worried.webp" alt="" width="160" height="160" loading="lazy"></div><div class="sbub"><b>조교</b><p>그럼 대리모델이 꼭 더 정확한 건 아니네요?</p></div></div><div class="say actuary"><div class="av" data-face="front" aria-hidden="true"><img src="assets/av_actuary_front.webp" alt="" width="160" height="160" loading="lazy"></div><div class="sbub"><b>박사<span class="npc" title="NPC">NPC</span></b><p>(손바닥을 든다) …대리모델의 목적은 정확도가 아니라 <b>원 모델과 같은 말을 하는 것</b>입니다. 원 모델을 검증 · 승인했다면, 창구의 종이도 그 모델의 판단을 따라야 하니까요. 숫자 하나로 고르지 말고, 기준선부터 봅시다. 기준선 MAE $9,151 대비 이 종이는 $3,113 입니다.</p></div></div></div></div></section><section class="part" id="check"><div class="wrap"><div class="part-head" style="--kc:var(--core)"><div class="hex">5</div><h2>확인 문제<span class="en">Check</span></h2><p>정답을 고르면 실제 숫자로 해설합니다.</p></div><div class="body"><div class="q" id="q5-1" data-ok="2" data-ex="선생님의 예측을 따라 하므로 충실도(시험 GBM 예측과의 R²)가 잎 6개에서 0.9607 입니다."><p class="qt">Q1. 대리모델 나무는 무엇을 ‘정답’으로 배웠나요?</p><div class="opts"><button data-i="0" data-why="그것은 ‘직접 배운 나무’입니다.">학습 데이터의 실제 의료비(charges)</button><button data-i="1" data-why="시험 데이터는 학습에 쓰지 않습니다.">시험 데이터의 실제 의료비</button><button data-i="2">최종 모델(GBM)이 학습 데이터 1,069명에게 낸 예측값</button></div><p class="fb" aria-live="polite"></p></div><div class="q" id="q5-2" data-ok="1" data-ex="잎 6개의 학습 CV 충실도는 0.9508 로 0.95 를 처음 넘습니다. 시험 충실도는 마지막에 확인만 했습니다(0.9607)."><p class="qt">Q2. 잎 수를 ‘시험 충실도가 가장 높은 값’(잎 15개, 0.9843)으로 고르지 않은 이유는?</p><div class="opts"><button data-i="0" data-why="계산 시간은 문제가 아닙니다.">15개는 계산이 너무 오래 걸려서</button><button data-i="1">시험 데이터로 고르면 누수이고, 학습 5-Fold 충실도 0.95 를 넘는 가장 작은 나무가 종이 한 장 목표에 맞기 때문</button><button data-i="2" data-why="잎이 많을수록 충실도는 대체로 오릅니다(0.70 → 0.98).">잎이 많으면 충실도가 내려가서</button></div><p class="fb" aria-live="polite"></p></div><div class="q" id="q5-3" data-ok="0" data-ex="흡연자 쪽 다음 질문은 BMI 30.01 입니다. 1편의 띠 세 줄(비흡연 · 흡연 · 흡연 + BMI 30 이상)이 나무 모양으로 다시 나타났습니다."><p class="qt">Q3. 최종 규칙표의 첫 질문이 ‘흡연자인가?’인 것이 뜻하는 것은?</p><div class="opts"><button data-i="0">선생님 모델의 견적을 가장 크게 가르는 단서가 흡연 여부(1편의 숨은 열쇠)다</button><button data-i="1" data-why="규칙표는 견적 금액을 정할 뿐, 가입 거절을 말하지 않습니다.">흡연자를 보험에서 빼야 한다</button><button data-i="2" data-why="나무는 오차를 가장 많이 줄이는 질문을 먼저 고릅니다(random_state 는 동점 처리용).">나무가 무작위로 고른 결과다</button></div><p class="fb" aria-live="polite"></p></div><div class="q" id="q5-4" data-ok="1" data-ex="기준선 $9,151 → 대리모델 $3,113 → 원 모델 $2,470. 6편에서는 이 손실을 받아들이고 규칙표를 앱으로 만듭니다."><p class="qt">Q4. 잎 6개 대리모델의 실제 MAE 는 $3,113, 원 모델은 $2,470 입니다. 이 차이를 어떻게 보고해야 할까요?</p><div class="opts"><button data-i="0" data-why="충실도가 1 이 아니므로 금액이 다른 고객이 있습니다.">대리모델이 원 모델과 같으니 차이는 무시한다</button><button data-i="1">종이 한 장으로 옮기며 감수한 손실로 밝히고, 충실도 · 기준선과 함께 보고한다</button><button data-i="2" data-why="이 경우 원 모델보다 MAE 가 큽니다.">대리모델이 더 정확하다고 쓴다</button></div><p class="fb" aria-live="polite"></p></div></div></div></section><section class="part" id="practice"><div class="wrap"><div class="part-head" style="--kc:var(--seq)"><div class="hex">6</div><h2>실무로 잇기<span class="en">From page to Colab</span></h2><p>이 페이지 숫자를 만든 코드.</p></div><div class="body"><p>e5 는 잎 수 다이얼 하나로 대리 나무를 학습하고 규칙표(export_text)를 출력합니다. f5 는 잎 2~16개를 모두 재고, 학습 5-Fold 충실도로 최종 잎 수를 정한 뒤 data/surrogate_tree.json 을 저장합니다.</p><div class="codebox"><div class="tabs" role="tablist"><button role="tab" data-src="src-e5" data-info="초보용 · def·for·if·들여쓰기 없음 · 다이얼: LEAVES">e5.py</button><button role="tab" data-src="src-f5" data-info="정식 코드 · common.py 필요 · 약 30초">f5.py</button><button role="tab" data-src="src-common" data-info="공통 코드 · 1부와 2부가 같은 파일">common.py</button></div><div class="tools"><span></span><button class="btn small" data-act="copy">복사</button><button class="btn small" data-act="py">.py 받기</button><button class="btn small" data-act="nb">.ipynb 받기</button></div><pre><code></code></pre></div><script type="text/plain" id="src-e5" data-file="e5.py" data-formal="0">
+# AI(인공지능) x 비즈니스 #1 인슈어테크_03_회귀모델 · 초보용 코드 e5.py
+# 5편 「최고 모델을 흉내 내는 나무」
+# 함수 · 반복문 · if 문 · 들여쓰기 없이 위에서 아래로 읽습니다. 맨 위 [다이얼] 줄만 바꿔 다시 실행하세요.
+
+# ① 다이얼
+LEAVES = 6     # [다이얼] 대리모델 나무의 잎(규칙) 수: 2 ~ 16
+
+# ② 데이터 읽기 · 나누기 (1부 공통: 10분위 층화 80:20)
+import pandas as pd
+import numpy as np
+from sklearn.model_selection import train_test_split
+from sklearn.ensemble import GradientBoostingRegressor
+from sklearn.tree import DecisionTreeRegressor, export_text
+df = pd.read_csv("https://raw.githubusercontent.com/fintech-data/Revolution/main/data/insurance.csv").drop_duplicates()
+X = pd.get_dummies(df.drop(columns="charges"), drop_first=True).astype(float)
+y = df["charges"]
+Xtr, Xte, ytr, yte = train_test_split(X, y, test_size=0.2, stratify=pd.qcut(y, 10, labels=False), random_state=42)
+
+# ③ 선생님 모델(최종 GBM) 학습
+gbm = GradientBoostingRegressor(n_estimators=200, max_depth=3, learning_rate=0.05, random_state=42).fit(Xtr, ytr)
+teacher_train = gbm.predict(Xtr)
+teacher_test = gbm.predict(Xte)
+
+# ④ 대리모델: 정답 대신 "선생님의 학습 데이터 예측"을 배운다
+sur = DecisionTreeRegressor(max_leaf_nodes=LEAVES, random_state=42).fit(Xtr, teacher_train)
+ps = sur.predict(Xte)
+print("fidelity R2 (vs GBM, test):", round(1 - ((teacher_test - ps) ** 2).sum() / ((teacher_test - teacher_test.mean()) ** 2).sum(), 4))
+print("fidelity MAE (vs GBM, test):", round(np.abs(teacher_test - ps).mean()))
+print("MAE vs actual (test):", round(np.abs(yte - ps).mean()), " GBM:", round(np.abs(yte - teacher_test).mean()))
+
+# ⑤ 같은 크기로 실제 charges 에 직접 배운 나무
+direct = DecisionTreeRegressor(max_leaf_nodes=LEAVES, random_state=42).fit(Xtr, ytr)
+print("direct tree MAE (test):", round(np.abs(yte - direct.predict(Xte)).mean()))
+
+# ⑥ 규칙표 (종이 한 장)
+print(export_text(sur, feature_names=list(X.columns), decimals=2))
+</script><script type="text/plain" id="src-f5" data-file="f5.py" data-formal="1">
+"""
+AI(인공지능) x 비즈니스 #1 인슈어테크_03_회귀모델 · 정식 코드 f5.py
+5편 「최고 모델을 흉내 내는 나무」
+무엇을, 어떤 순서로:
+ ① 1부 나누기, 최종 모델(GBM)을 학습 데이터로 학습
+ ② 대리모델: 회귀나무가 "GBM 의 학습 데이터 예측"을 정답 삼아 배운다 (잎 수 2~16)
+ ③ 충실도 = 시험 268명에서 GBM 예측과의 R² · MAE, 정확도 = 실제값과의 MAE · 고액 MAE
+ ④ 같은 잎 수로 실제 charges 에 직접 배운 나무와 비교
+ ⑤ 잎 수 결정은 학습 데이터 5-Fold 충실도(R²)로만: 충실도 0.95 이상인 가장 작은 나무
+ ⑥ 최종 대리모델을 data/surrogate_tree.json 으로 저장 (feature · threshold · left · right · value · n)
+"""
+import json
+import numpy as np
+import pandas as pd
+from sklearn.tree import DecisionTreeRegressor
+from sklearn.model_selection import StratifiedKFold
+import common as C
+
+LEAVES = list(range(2, 17))
+FIDELITY_GOAL = 0.95
+
+
+def r2(a, b):
+    a, b = np.asarray(a, float), np.asarray(b, float)
+    return 1 - np.sum((a - b) ** 2) / np.sum((a - a.mean()) ** 2)
+
+
+def tree_json(t, cols):
+    tr = t.tree_
+    nodes = []
+    for i in range(tr.node_count):
+        leaf = tr.children_left[i] == -1
+        nodes.append(dict(id=i, feature=None if leaf else cols[tr.feature[i]],
+                          threshold=None if leaf else round(float(tr.threshold[i]), 4),
+                          left=None if leaf else int(tr.children_left[i]), right=None if leaf else int(tr.children_right[i]),
+                          value=round(float(tr.value[i][0][0]), 2), n=int(tr.n_node_samples[i])))
+    return nodes
+
+
+def rules(nodes):
+    """잎마다 조건 목록."""
+    out = []
+
+    def walk(i, conds):
+        n = nodes[i]
+        if n["left"] is None:
+            out.append(dict(leaf=i, conds=conds, value=n["value"], n=n["n"]))
+            return
+        f, t = n["feature"], n["threshold"]
+        walk(n["left"], conds + ["%s <= %s" % (f, t)])
+        walk(n["right"], conds + ["%s > %s" % (f, t)])
+    walk(0, [])
+    return out
+
+
+def run(verbose=True):
+    df, X, y, info = C.load_clean_xy()
+    Xtr, Xte, ytr, yte = C.split(X, y)
+    gbm = C.final_model().fit(Xtr, ytr)
+    g_tr, g_te = gbm.predict(Xtr), gbm.predict(Xte)
+    top = yte.values >= np.quantile(yte, 0.9)
+    cv = list(StratifiedKFold(5, shuffle=True, random_state=C.SEED).split(Xtr, C.strata(ytr)))
+
+    rows = []
+    for L in LEAVES:
+        s = DecisionTreeRegressor(max_leaf_nodes=L, random_state=C.SEED).fit(Xtr, g_tr)
+        d = DecisionTreeRegressor(max_leaf_nodes=L, random_state=C.SEED).fit(Xtr, ytr)
+        cvf = np.zeros(len(ytr))
+        for a, b in cv:
+            cvf[b] = DecisionTreeRegressor(max_leaf_nodes=L, random_state=C.SEED).fit(Xtr.iloc[a], g_tr[a]).predict(Xtr.iloc[b])
+        ps, pd_ = s.predict(Xte), d.predict(Xte)
+        rows.append(dict(leaves=L, depth=s.get_depth(), cv_fid_R2=r2(g_tr, cvf),
+                         fid_R2=r2(g_te, ps), fid_MAE=float(np.mean(np.abs(g_te - ps))),
+                         MAE=float(np.mean(np.abs(yte - ps))), MAE_top10=float(np.mean(np.abs(yte.values[top] - ps[top]))),
+                         direct_MAE=float(np.mean(np.abs(yte - pd_))), direct_MAE_top10=float(np.mean(np.abs(yte.values[top] - pd_[top]))),
+                         under_rate=float(np.mean(ps < yte))))
+    tab = pd.DataFrame(rows).set_index("leaves")
+    ok = tab[tab.cv_fid_R2 >= FIDELITY_GOAL]
+    L_final = int(ok.index.min()) if len(ok) else LEAVES[-1]
+
+    sur = DecisionTreeRegressor(max_leaf_nodes=L_final, random_state=C.SEED).fit(Xtr, g_tr)
+    cols = list(X.columns)
+    nodes = tree_json(sur, cols)
+    used = sorted({n["feature"] for n in nodes if n["feature"]})
+    js = dict(model="surrogate of GradientBoostingRegressor(%s)" % C.FINAL_PARAMS, leaves=L_final,
+              columns=cols, features_used=used, nodes=nodes,
+              note="trained on train-set GBM predictions (1,069 rows, split.csv). value = quote in USD.")
+    with open("data/surrogate_tree.json", "w", encoding="utf-8") as f:
+        json.dump(js, f, ensure_ascii=False, indent=1)
+    gm = C.metrics(yte, g_te)
+    out = dict(tab=tab, L_final=L_final, nodes=nodes, rules=rules(nodes), used=used, gbm_metrics=gm,
+               g_te=g_te, g_tr=g_tr, Xtr=Xtr, Xte=Xte, ytr=ytr, yte=yte, sur=sur, X=X)
+    if verbose:
+        print("GBM (teacher) test: MAE=%.0f  MAE_top10=%.0f  R2=%.4f" % (gm["MAE"], gm["MAE_top10"], gm["R2"]))
+        print("surrogate = tree trained on GBM train predictions; direct = same-size tree trained on charges")
+        print(tab.round({"cv_fid_R2": 4, "fid_R2": 4, "fid_MAE": 0, "MAE": 0, "MAE_top10": 0, "direct_MAE": 0,
+                         "direct_MAE_top10": 0, "under_rate": 3}).to_string())
+        print()
+        print("chosen leaves (smallest with train 5-fold fidelity R2 >= %.2f): %d" % (FIDELITY_GOAL, L_final))
+        print("features used:", used)
+        print("root split:", nodes[0]["feature"], nodes[0]["threshold"])
+        for r in rules(nodes):
+            print("  leaf %2d  n=%4d  quote=%9.2f  | %s" % (r["leaf"], r["n"], r["value"], " & ".join(r["conds"])))
+    return out
+
+
+if __name__ == "__main__":
+    run()
+</script><script type="text/plain" id="src-common" data-file="common.py" data-formal="0">
+"""
+AI(인공지능) x 비즈니스 #1 인슈어테크_03_회귀모델 · 인슈어테크_04_회귀모델_실전 · 공통 코드 (common.py)
+글 · 안상선 ((주)M-Robo 대표) · CC BY-NC 4.0
+
+두 시리즈(1부 개념편 · 2부 문제편)가 똑같이 쓰는 파일입니다. 정리 규칙이 두 부에서 같아야 숫자를 비교할 수 있습니다.
+
+하는 일
+ ① 건강보험 의료비 데이터 읽기 (공개 학습용 데이터, 1,338행 × 7열)
+    읽는 순서: 내 컴퓨터의 data/insurance.csv -> 이 저장소의 raw 주소 -> 원 출처 주소
+ ② 정리 규칙: 완전히 같은 행 1건만 뺀다. 목표값(charges)은 자르거나 고치지 않는다.
+ ③ 범주형 원-핫 인코딩(drop_first) -> 특성 8개
+ ④ 1부의 학습/시험 나누기: charges 10분위로 층화한 80:20, random_state=42 (data/split.csv 와 같음)
+ ⑤ 기준선: 모두에게 "학습 데이터 평균"만 답하기
+ ⑥ (선택) 흡연 x 비만(BMI 30 이상) 상호작용 특성 만들기 - 2부 3·4편에서 씀
+
+원칙: 데이터 증강(합성 행 · 행 복제 · 정답에 잡음 넣기)은 쓰지 않는다. 원본 행만 쓴다.
+"""
+import os
+import numpy as np
+import pandas as pd
+from sklearn.model_selection import train_test_split, StratifiedKFold
+
+LOCAL_PATHS = ["data/insurance.csv", "../data/insurance.csv", "insurance.csv"]
+REPO_URL = "https://raw.githubusercontent.com/adminmrobo/ai-biz-insurtech-03/main/data/insurance.csv"
+SOURCE_URL = "https://raw.githubusercontent.com/fintech-data/Revolution/main/data/insurance.csv"
+SOURCE_MD5 = "d5364d06246fb4bfa4cc7d1ee89ebd0d"
+SEED = 42
+TARGET = "charges"
+NUM_COLS = ["age", "bmi", "children"]
+CAT_COLS = ["sex", "smoker", "region"]
+BMI_OBESE = 30.0   # WHO 성인 비만 기준 (BMI 30 이상)
+
+
+def load_raw(path=None):
+    """① 원본 데이터 읽기. path 를 주지 않으면 로컬 -> 저장소 -> 원 출처 순서로 찾는다."""
+    if path is None:
+        path = os.environ.get("INS_DATA")
+    if path:
+        return pd.read_csv(path)
+    for p in LOCAL_PATHS:
+        if os.path.exists(p):
+            return pd.read_csv(p)
+    for url in (REPO_URL, SOURCE_URL):
+        try:
+            return pd.read_csv(url)
+        except Exception:
+            pass
+    raise FileNotFoundError("insurance.csv 를 찾지 못했습니다.")
+
+
+def clean(df, verbose=False):
+    """② 정리 규칙. 바뀌는 행 수를 info 에 남긴다.
+
+    - 완전히 같은 행(7개 열이 모두 같음) 1건 -> 뒤의 것을 뺀다
+      (같은 사람이 학습과 시험에 동시에 들어가 점수가 부풀려지는 것을 막기 위해)
+    - charges(목표값): 고액도 그대로 둔다. 자르거나(상한) 지우지 않는다.
+    - bmi IQR 밖 9명(최대 53.13): 사람에게 가능한 값이라 그대로 둔다.
+    - 결측: 없음
+    """
+    n0 = len(df)
+    dup_mask = df.duplicated(keep="first")
+    dup_rows = list(df.index[dup_mask])
+    out = df.loc[~dup_mask].copy()
+    q1, q3 = out[TARGET].quantile([0.25, 0.75])
+    iqr = q3 - q1
+    tgt_iqr = int(((out[TARGET] < q1 - 1.5 * iqr) | (out[TARGET] > q3 + 1.5 * iqr)).sum())
+    b1, b3 = out["bmi"].quantile([0.25, 0.75])
+    biqr = b3 - b1
+    bmi_iqr = int(((out["bmi"] < b1 - 1.5 * biqr) | (out["bmi"] > b3 + 1.5 * biqr)).sum())
+    info = {"rows_raw": n0, "dropped_duplicate_rows": dup_rows, "rows_clean": len(out),
+            "missing": int(df.isna().sum().sum()),
+            "charges_iqr_flagged_kept": tgt_iqr, "bmi_iqr_flagged_kept": bmi_iqr,
+            "charges_changed": 0}
+    if verbose:
+        print("rule | rows changed")
+        print("drop exact duplicate | %d (row %s)" % (len(dup_rows), dup_rows))
+        print("charges IQR flagged, kept as is | %d" % tgt_iqr)
+        print("bmi IQR flagged, kept as is | %d" % bmi_iqr)
+        print("missing values | %d" % info["missing"])
+    return out, info
+
+
+def encode(df):
+    """③ X(원-핫, drop_first) 와 y(charges) 만들기. 열 순서는 고정."""
+    y = df[TARGET].astype(float)
+    X = pd.get_dummies(df.drop(columns=TARGET), columns=CAT_COLS, drop_first=True).astype(float)
+    cols = ["age", "bmi", "children", "sex_male", "smoker_yes",
+            "region_northwest", "region_southeast", "region_southwest"]
+    for c in cols:
+        if c not in X.columns:
+            X[c] = 0.0
+    return X[cols], y
+
+
+def add_interactions(X):
+    """⑥ 흡연 x 비만 상호작용. 흡연자이면서 BMI 30 이상인 사람의 의료비가 따로 뛰는 것을 직선 모델이 잡게 한다."""
+    X = X.copy()
+    X["bmi30"] = (X["bmi"] >= BMI_OBESE).astype(float)
+    X["smoker_bmi30"] = X["smoker_yes"] * X["bmi30"]
+    X["smoker_bmi"] = X["smoker_yes"] * X["bmi"]
+    return X
+
+
+def strata(y, q=10):
+    """분위 층화용 꼬리표: 금액을 q 개 구간으로 나눈 번호."""
+    return pd.qcut(y, q, labels=False, duplicates="drop")
+
+
+def split(X, y):
+    """④ 1부의 학습/시험 나누기 (charges 10분위 층화, 80:20, random_state=42)."""
+    return train_test_split(X, y, test_size=0.2, stratify=strata(y), random_state=SEED)
+
+
+def folds(y, n_splits=5):
+    """2부의 5-Fold: charges 10분위로 층화한 StratifiedKFold(shuffle=True, random_state=42)."""
+    skf = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=SEED)
+    return list(skf.split(np.zeros(len(y)), strata(y)))
+
+
+def baseline(y_train, n):
+    """⑤ 기준선: 모두에게 학습 데이터 평균만 답한다."""
+    return np.full(n, float(np.mean(y_train)))
+
+
+def metrics(y, p):
+    """주지표 + 보조 지표. MAE 를 주지표로, RMSE · R² · 고액(상위 10%) MAE · 과소 추정 비율을 함께."""
+    y = np.asarray(y, float)
+    p = np.asarray(p, float)
+    e = y - p
+    top = y >= np.quantile(y, 0.9)
+    ss_res = float(np.sum(e ** 2))
+    ss_tot = float(np.sum((y - y.mean()) ** 2))
+    return {"MAE": float(np.mean(np.abs(e))), "RMSE": float(np.sqrt(np.mean(e ** 2))),
+            "R2": 1 - ss_res / ss_tot, "MAE_top10": float(np.mean(np.abs(e[top]))),
+            "under_rate": float(np.mean(p < y)), "bias": float(np.mean(p - y))}
+
+
+# 최종 모델 설정: 1부 3편에서 "학습 데이터만" 5-Fold 교차검증(MAE)으로 고른 값
+# (n_estimators 100/200/300 x max_depth 2/3/4 x learning_rate 0.05/0.1 중 1위)
+FINAL_PARAMS = {"n_estimators": 200, "max_depth": 3, "learning_rate": 0.05, "random_state": SEED}
+
+MODEL_NAMES = ["Linear", "Ridge", "Decision Tree", "KNN", "Gradient Boosting"]
+MODEL_KO = {"Linear": "선형 회귀", "Ridge": "릿지", "Decision Tree": "의사결정나무", "KNN": "KNN",
+            "Gradient Boosting": "그래디언트 부스팅"}
+
+
+def models():
+    """두 부가 같이 쓰는 모델 다섯. 표준화가 필요한 모델은 Pipeline 안에서 학습 데이터에만 fit."""
+    from sklearn.pipeline import make_pipeline
+    from sklearn.preprocessing import StandardScaler
+    from sklearn.linear_model import LinearRegression, Ridge
+    from sklearn.tree import DecisionTreeRegressor
+    from sklearn.neighbors import KNeighborsRegressor
+    from sklearn.ensemble import GradientBoostingRegressor
+    return {
+        "Linear": make_pipeline(StandardScaler(), LinearRegression()),
+        "Ridge": make_pipeline(StandardScaler(), Ridge(alpha=1.0)),
+        "Decision Tree": DecisionTreeRegressor(max_depth=4, random_state=SEED),
+        "KNN": make_pipeline(StandardScaler(), KNeighborsRegressor(n_neighbors=10)),
+        "Gradient Boosting": GradientBoostingRegressor(**FINAL_PARAMS),
+    }
+
+
+def final_model():
+    from sklearn.ensemble import GradientBoostingRegressor
+    return GradientBoostingRegressor(**FINAL_PARAMS)
+
+
+def load_clean_xy():
+    """한 줄로: 읽기 -> 정리 -> X, y (원본 행 번호를 index 로 유지)."""
+    df, info = clean(load_raw())
+    X, y = encode(df)
+    return df, X, y, info
+</script>
+<details class="run"><summary>실행 결과 보기 (정식 코드 f5.py 를 실제로 실행한 출력)</summary><pre>GBM (teacher) test: MAE=2470  MAE_top10=3612  R2=0.8597
+surrogate = tree trained on GBM train predictions; direct = same-size tree trained on charges
+        depth  cv_fid_R2  fid_R2  fid_MAE     MAE  MAE_top10  direct_MAE  direct_MAE_top10  under_rate
+leaves                                                                                                
+2           1     0.7087  0.6999   4768.0  5753.0    10237.0      5750.0           10123.0       0.448
+3           2     0.8654  0.8791   3338.0  4476.0     5382.0      4476.0            5392.0       0.433
+4           2     0.9375  0.9441   2063.0  3403.0     5242.0      3399.0            5251.0       0.354
+5           3     0.9449  0.9556   1892.0  3241.0     4104.0      3257.0            4289.0       0.366
+6           3     0.9508  0.9607   1750.0  3113.0     4140.0      3109.0            4259.0       0.362
+7           3     0.9595  0.9715   1554.0  2963.0     4111.0      2979.0            4293.0       0.369
+8           3     0.9649  0.9744   1449.0  2839.0     4111.0      2850.0            4293.0       0.340
+9           4     0.9683  0.9765   1372.0  2763.0     4064.0      2840.0            4293.0       0.306
+10          4     0.9704  0.9787   1321.0  2752.0     4287.0      2830.0            4607.0       0.295
+11          4     0.9709  0.9809   1229.0  2724.0     4287.0      2758.0            4561.0       0.246
+12          4     0.9728  0.9809   1228.0  2716.0     4287.0      2757.0            4555.0       0.246
+13          5     0.9743  0.9830   1112.0  2673.0     4287.0      2757.0            4555.0       0.254
+14          5     0.9747  0.9829   1105.0  2646.0     4024.0      2710.0            4555.0       0.257
+15          5     0.9761  0.9843   1040.0  2643.0     4024.0      2713.0            4555.0       0.246
+16          5     0.9770  0.9843   1041.0  2646.0     4051.0      2637.0            4555.0       0.246
+
+chosen leaves (smallest with train 5-fold fidelity R2 &gt;= 0.95): 6
+features used: [&#x27;age&#x27;, &#x27;bmi&#x27;, &#x27;smoker_yes&#x27;]
+root split: smoker_yes 0.5
+  leaf  5  n= 474  quote=  5452.28  | smoker_yes &lt;= 0.5 &amp; age &lt;= 42.5
+  leaf  9  n= 289  quote= 11303.73  | smoker_yes &lt;= 0.5 &amp; age &gt; 42.5 &amp; age &lt;= 58.5
+  leaf 10  n=  92  quote= 15311.21  | smoker_yes &lt;= 0.5 &amp; age &gt; 42.5 &amp; age &gt; 58.5
+  leaf  3  n=  98  quote= 21338.87  | smoker_yes &gt; 0.5 &amp; bmi &lt;= 30.01
+  leaf  7  n=  62  quote= 38310.21  | smoker_yes &gt; 0.5 &amp; bmi &gt; 30.01 &amp; age &lt;= 41.5
+  leaf  8  n=  54  quote= 45151.25  | smoker_yes &gt; 0.5 &amp; bmi &gt; 30.01 &amp; age &gt; 41.5</pre></details></div></div></section><section class="part" id="prompt"><div class="wrap"><div class="part-head" style="--kc:var(--seq)"><div class="hex">✦</div><h2>AI와 함께 더 공부하기<span class="en">AI tutor prompt</span></h2><p>ChatGPT·Claude·Gemini 등에 그대로 붙여 넣으세요. [ ] 안만 바꾸면 됩니다.</p></div><div class="body"><div class="prompt"><pre id="prompt-5"># 역할
+당신은 보험 데이터 분석을 가르치는 친절한 튜터입니다. 저는 「AI(인공지능) x 비즈니스 #1 인슈어테크_03_회귀모델」 1부 5편 「최고 모델을 흉내 내는 나무」을 공부하고 있습니다.
+
+# 배경
+- 데이터: 공개 학습용 건강보험 의료비 데이터 1,338행 (https://raw.githubusercontent.com/fintech-data/Revolution/main/data/insurance.csv)
+- 열: age(나이) · sex(성별) · bmi(체질량지수) · children(자녀 수) · smoker(흡연 여부) · region(미국 내 지역 4곳) · charges(1년 의료비 청구 금액, 달러 = 맞힐 대상)
+- 완전히 같은 행 1건을 빼고 1,337행을 씁니다. 목표값 charges 는 자르거나 고치지 않습니다(고액은 오류가 아니라 꼬리).
+- 학습/시험 나누기는 charges 10분위 층화 80:20, random_state=42 로 미리 정해져 있습니다(학습 1,069명, 시험 268명).
+- 기준선: 모두에게 학습 데이터 평균만 답하기 (R² = 0 근처)
+- 내 수준: [예: 파이썬은 조금, 통계는 처음]
+
+# 해 줄 일
+1. 최종 모델의 학습 데이터 예측을 정답 삼아 회귀나무 대리모델을 학습하는 코드를 써 주세요.
+2. 충실도(원 모델 예측과의 R²)와 정확도(실제값과의 MAE)를 구분해서 설명해 주세요.
+3. 잎 수를 학습 데이터 교차검증 충실도로 고르는 방법을 알려 주세요.
+4. 제 규칙표 [붙여 넣기] 가 성별 · 지역을 쓰는지, 쓰면 무엇을 점검해야 하는지 알려 주세요.
+
+# 반드시 지킬 것
+- 기호나 약어(MAE, RMSE, R² 등)는 처음 나올 때 한 줄로 설명하기
+- 데이터 증강(합성 행 · 행 복제 · 정답에 잡음 넣기)은 쓰지 않기
+- 전처리(표준화 · 인코딩)는 Pipeline 안에서 학습 데이터에만 fit (데이터 누수 금지)
+- 여유분 · 하이퍼파라미터는 학습 데이터의 교차검증으로만 고르기 (시험 데이터는 마지막에 한 번만)
+- R² 하나만 보고하지 않기: MAE · RMSE · 고액(상위 10%) MAE · 과소 추정 비율을 기준선과 함께
+- 로그 변환을 썼다면 예측을 달러로 되돌려 평가하기
+- 코드는 Google Colab 에서 바로 실행되게, random_state=42 고정, 내가 바꿀 줄에는 # [변경] 주석
+
+내 결과: [숫자 붙여 넣기]
+내가 쓴 문장: [붙여 넣기]
+
+# 답변 형식
+1) 내 숫자를 기준선과 비교해 해석  2) 내 문장에서 틀리거나 과장된 곳  3) 답을 바로 주기 전에, 내가 스스로 확인할 질문 3개</pre></div><div class="btns"><button class="btn small" data-copy="prompt-5">프롬프트 복사</button><button class="btn small" data-save="prompt-5" data-name="ai_prompt_5.txt">.txt 받기</button></div></div></div></section><section class="part" id="glossary"><div class="wrap"><div class="part-head" style="--kc:var(--core)"><div class="hex">?</div><h2>용어 사전<span class="en">Glossary</span></h2><p>비유로 먼저, 뜻은 그다음.</p></div><div class="body"><dl class="gloss"><div><dt>대리모델</dt><dd><i>선생님 답을 베끼는 학생.</i> 복잡한 모델의 예측을 정답 삼아 배운 단순한 모델.</dd></div><div><dt>충실도</dt><dd><i>선생님과 같은 말을 하는 정도.</i> 원 모델 예측과의 R² · MAE. 실제값과의 오차와 다르다.</dd></div><div><dt>회귀나무</dt><dd><i>스무고개로 금액 정하기.</i> 질문으로 사람을 나눠, 같은 잎의 사람에게 같은 금액을 준다.</dd></div><div><dt>잎</dt><dd><i>종이의 한 줄.</i> 나무 끝. 잎 하나 = 규칙 하나 = 견적 금액 하나.</dd></div><div><dt>max_leaf_nodes</dt><dd><i>종이 줄 수 제한.</i> 나무가 가질 수 있는 잎의 최대 개수.</dd></div><div><dt>숨은 열쇠 회수</dt><dd><i>1편 떡밥의 회수.</i> 평면에 없던 흡연 여부가 나무의 첫 질문이 된다.</dd></div></dl></div></div></section><section class="part" id="author-sec"><div class="wrap"><div class="body"><a class="teach-link" href="answers.html#a5">강사·튜터라면 → 교육자용 정답 (5편): 정답 · 채점 기준 · 강의 멘트</a>
+<div class="card"><h3>글 · 안상선 ((주)M-Robo 대표)</h3><p class="cap">(주)M-Robo 대표. 금융·보험 데이터와 AI를 현장에서 쓰는 방법을, 버튼만 눌러 따라 할 수 있는 교재로 만듭니다.</p></div></div></div></section><section class="outro" id="outro"><div class="wrap"><div class="body"><h2>수고하셨습니다!</h2><img class="scene" src="assets/s5.webp" alt="커다란 숲 모형 앞에서 작은 나무 화분에 규칙 카드 여섯 장을 거는 박사와 조교" width="1440" height="800" loading="lazy"><div class="chat"><div class="say actuary"><div class="av" data-face="explain" aria-hidden="true"><img src="assets/av_actuary_explain.webp" alt="" width="160" height="160" loading="lazy"></div><div class="sbub"><b>박사<span class="npc" title="NPC">NPC</span></b><ul><li>대리 나무는 GBM 의 예측을 배운다. 잎 6개로 시험 충실도 R² 0.961</li><li>첫 질문은 흡연 여부, 흡연자 다음은 BMI 30 근처: 1편의 숨은 열쇠 회수</li><li>대가: MAE $2,470 → $3,113. 성별 · 지역은 쓰지 않는다</li></ul></div></div><div class="say bomi"><div class="av" data-face="proud" aria-hidden="true"><img src="assets/av_bomi_proud.webp" alt="" width="160" height="160" loading="lazy"></div><div class="sbub"><b>조교</b><p>선생님 답을 베꼈는데 오히려 고액 고객은 더 잘 맞히는 줄도 있었어요. 머니로보는 자기도 베끼게 해 달래요.</p></div></div><div class="say fly"><div class="av" data-face="side" aria-hidden="true"><img src="assets/av_fly_side.webp" alt="" width="160" height="160" loading="lazy"></div><div class="sbub"><b>초파리 연구원</b><p>종이 한 장이면 끝이에요? 이걸 앱으로 만들면요? 인터넷이 끊기면요? 저는 바람만 불어도 날아가서 걱정이 많아요.</p></div></div></div><div class="nav-eps"><a class="btn" href="4_margin_lab.html">← 이전 편</a><a class="btn" href="index.html">처음 화면</a><a class="btn primary" href="6_quote_app.html">다음 편: 기준서가 곧 견적: 의료비 견적 앱 →</a></div></div></div></section></main><footer><div class="wrap"><p><b>최고 모델을 흉내 내는 나무</b> · AI(인공지능) x 비즈니스 #1 인슈어테크_03_회귀모델</p><p>글 · 안상선 ((주)M-Robo 대표)</p><p><b>설명용 모형인 것:</b> 이 시리즈는 공개 학습용 건강보험 의료비 데이터(1,338행)를 그대로 씁니다. 가상 데이터를 만들거나 데이터를 증강하지 않습니다. 완전히 같은 행 1건만 빼고, 목표값(charges)은 자르거나 고치지 않습니다. 잎 수 다이얼의 숫자와 규칙표는 잎 2~16개 나무를 Python 으로 모두 학습해 미리 계산한 값입니다.</p><p><b>주의:</b> 이 시리즈는 교육용 설명입니다. 보험 가입 · 보험료 · 보험금 심사 · 투자 · 의료에 대한 조언이 아닙니다. 데이터는 공개 학습 데이터 원본이며, 실제 보험사의 현재 보험료 산정 · 심사 기준을 뜻하지 않습니다. 건강 정보(흡연 · BMI)는 설명용이며 의료 조언이 아닙니다. 실제 보험료 산정에서 성별 · 지역 · 나이 같은 특성의 사용은 감독 규정에 따라 금지되거나 제한될 수 있습니다.</p><p><b>데이터:</b> 공개 학습용 Medical Cost(insurance.csv) 데이터 (<a href="https://raw.githubusercontent.com/fintech-data/Revolution/main/data/insurance.csv">원본 CSV</a>) · 저장소 사본 <a href="data/insurance.csv">data/insurance.csv</a> (md5 <span class="mono">d5364d06246fb4bfa4cc7d1ee89ebd0d</span>) · 나누기 <a href="data/split.csv">data/split.csv</a></p><p><b>참고:</b> scikit-learn User Guide (Linear Models, Nearest Neighbors, Decision Trees, Ensembles, Model evaluation)</p><p><a href="https://creativecommons.org/licenses/by-nc/4.0/deed.ko">CC BY-NC 4.0</a> — 출처 표기 예: “AI(인공지능) x 비즈니스 #1 인슈어테크_03_회귀모델, 글 · 안상선 ((주)M-Robo 대표), CC BY-NC 4.0”</p></div></footer>
+<p id="lang-note" class="note" hidden style="position:fixed;bottom:12px;left:12px;right:12px;z-index:30"></p>
+<script>const SITE="https://adminmrobo.github.io/ai-biz-insurtech-03/";
+// ---------- 공통: 테마 색 읽기 ----------
+function cssv(n){return getComputedStyle(document.documentElement).getPropertyValue(n).trim()}
+const REDRAW=[];function onTheme(f){REDRAW.push(f)}
+try{matchMedia('(prefers-color-scheme: dark)').addEventListener('change',()=>REDRAW.forEach(f=>f()))}catch(e){}
+new MutationObserver(()=>REDRAW.forEach(f=>f())).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});
+// 캔버스 준비 (선명하게)
+function prep(cv,h){const r=cv.getBoundingClientRect();const w=Math.max(200,r.width||cv.parentNode.clientWidth||600);const d=window.devicePixelRatio||1;cv.width=w*d;cv.height=h*d;cv.style.height=h+'px';const c=cv.getContext('2d');c.setTransform(d,0,0,d,0,0);return {c,w,h}}
+let RZ;addEventListener('resize',()=>{clearTimeout(RZ);RZ=setTimeout(()=>REDRAW.forEach(f=>f()),150)});
+const fmtP=(x,d=1)=>(x*100).toFixed(d)+'%';
+const nf=n=>Number(n).toLocaleString('en-US');
+// ---------- 확인 문제 ----------
+document.querySelectorAll('.q').forEach(q=>{const ok=q.dataset.ok,fb=q.querySelector('.fb');q.querySelectorAll('.opts button').forEach(b=>b.addEventListener('click',()=>{
+ q.querySelectorAll('.opts button').forEach(x=>x.classList.remove('right','wrong'));
+ if(b.dataset.i===ok){b.classList.add('right');fb.innerHTML='<b>정답입니다.</b> '+q.dataset.ex}else{b.classList.add('wrong');fb.innerHTML='<b>다시 생각해 보세요.</b> '+(b.dataset.why||'')}}))});
+// ---------- 복사 · 내려받기 ----------
+function copyTxt(t,btn){const o=btn.textContent;const done=()=>{btn.textContent='복사됨';setTimeout(()=>btn.textContent=o,1300)};try{navigator.clipboard.writeText(t).then(done,()=>{btn.textContent='직접 선택해 복사하세요'})}catch(e){btn.textContent='직접 선택해 복사하세요'}}
+function saveFile(name,text,type){try{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([text],{type:type||'text/plain'}));a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},500)}catch(e){}}
+function toIpynb(src,formal){const lines=src.split('\n');const cells=[];let cur=[];
+ lines.forEach(l=>{if(/^# [①-⑳]/.test(l)&&cur.join('').trim()){cells.push(cur);cur=[]}cur.push(l)});if(cur.join('').trim())cells.push(cur);
+ const mk=a=>{while(a.length&&!a[a.length-1].trim())a.pop();return {cell_type:'code',metadata:{},execution_count:null,outputs:[],source:a.map((l,i)=>i<a.length-1?l+'\n':l)}};
+ const out=cells.map(mk).filter(c=>c.source.join('').trim());
+ if(formal)out.unshift(mk(['# 공통 코드 내려받기 (Colab)','!wget -q -O common.py '+SITE+'code/common.py']));
+ return JSON.stringify({cells:out,metadata:{kernelspec:{name:'python3',display_name:'Python 3'},language_info:{name:'python'}},nbformat:4,nbformat_minor:5},null,1)}
+document.querySelectorAll('.codebox').forEach(box=>{const tabs=[...box.querySelectorAll('.tabs button')];const pre=box.querySelector('pre code');const info=box.querySelector('.tools span');
+ let curId=null;function show(b){tabs.forEach(t=>t.setAttribute('aria-selected',t===b?'true':'false'));curId=b.dataset.src;const s=document.getElementById(curId);pre.textContent=s.textContent.replace(/^\n/,'');info.textContent=b.dataset.info||''}
+ tabs.forEach(t=>t.addEventListener('click',()=>show(t)));if(tabs[0])show(tabs[0]);
+ box.querySelector('[data-act=copy]').addEventListener('click',e=>copyTxt(pre.textContent,e.currentTarget));
+ box.querySelector('[data-act=py]').addEventListener('click',()=>{const s=document.getElementById(curId);saveFile(s.dataset.file,pre.textContent,'text/x-python')});
+ box.querySelector('[data-act=nb]').addEventListener('click',()=>{const s=document.getElementById(curId);saveFile(s.dataset.file.replace(/\.py$/,'.ipynb'),toIpynb(pre.textContent,s.dataset.formal==='1'),'application/json')})});
+document.querySelectorAll('[data-copy]').forEach(b=>b.addEventListener('click',e=>copyTxt(document.getElementById(b.dataset.copy).textContent,e.currentTarget)));
+document.querySelectorAll('[data-save]').forEach(b=>b.addEventListener('click',()=>saveFile(b.dataset.name,document.getElementById(b.dataset.save).textContent)));
+// ---------- 상태 캐릭터 ----------
+function robo(id,st){const w=document.getElementById(id);if(!w||w.dataset.st===st)return;w.dataset.st=st;w.querySelectorAll('[data-rs]').forEach(e=>e.hidden=e.dataset.rs!==st)}
+// ---------- 식구 카드: 모습 바꾸기 ----------
+document.querySelectorAll('.crew .moods button').forEach(b=>b.addEventListener('click',()=>{const card=b.closest('.crew');
+ card.querySelectorAll('.moods button').forEach(x=>x.setAttribute('aria-pressed',x===b?'true':'false'));
+ card.querySelectorAll('.cf').forEach(f=>f.classList.toggle('on',f.dataset.face===b.dataset.fb))}));
+// ---------- 막대 (기준선 포함) ----------
+function setBar(el,v,base){el.querySelector('.fill').style.width=Math.max(0,Math.min(1,v))*100+'%';const bl=el.querySelector('.base');if(bl){if(base==null)bl.hidden=true;else{bl.hidden=false;bl.style.left='calc('+base*100+'% - 1px)'}}el.querySelector('.v').textContent=fmtP(v)}
+
+// ---------- 회귀용 도우미 ----------
+const fmtD=(x,d=0)=>(x<0?'−$':'$')+Math.abs(x).toLocaleString('en-US',{maximumFractionDigits:d,minimumFractionDigits:d});
+const fmt=(x,d=3)=>Number(x).toFixed(d);
+function setBarV(el,frac,base,txt){el.querySelector('.fill').style.width=Math.max(0,Math.min(1,frac))*100+'%';const bl=el.querySelector('.base');if(bl){if(base==null)bl.hidden=true;else{bl.hidden=false;bl.style.left='calc('+Math.max(0,Math.min(1,base))*100+'% - 1px)'}}el.querySelector('.v').textContent=txt}
+// 간단한 좌표 그림: plot(cv,{h,x:[min,max],y:[min,max],xt:[...],yt:[...],xl,yl,xf,yf,draw:(c,X,Y)=>{}})
+function plot(cv,o){const {c,w,h}=prep(cv,o.h||320);const L=o.left||62,R=12,T=12,B=o.bottom||40;const X=v=>L+(v-o.x[0])/(o.x[1]-o.x[0])*(w-L-R);const Y=v=>h-B-(v-o.y[0])/(o.y[1]-o.y[0])*(h-T-B);
+ c.clearRect(0,0,w,h);c.font='11px '+cssv('--f-mono');c.lineWidth=1;
+ (o.yt||[]).forEach(t=>{c.strokeStyle=cssv('--grid');c.beginPath();c.moveTo(L,Math.round(Y(t))+.5);c.lineTo(w-R,Math.round(Y(t))+.5);c.stroke();c.fillStyle=cssv('--muted');c.textAlign='right';c.fillText((o.yf||String)(t),L-6,Y(t)+4)});
+ (o.xt||[]).forEach(t=>{c.fillStyle=cssv('--muted');c.textAlign='center';c.fillText((o.xf||String)(t),X(t),h-B+16)});
+ c.strokeStyle=cssv('--line');c.strokeRect(L+.5,T+.5,w-L-R-1,h-T-B-1);
+ c.fillStyle=cssv('--muted');c.textAlign='center';if(o.xl)c.fillText(o.xl,L+(w-L-R)/2,h-6);
+ if(o.yl){c.save();c.translate(12,T+(h-T-B)/2);c.rotate(-Math.PI/2);c.fillText(o.yl,0,0);c.restore()}
+ c.save();c.beginPath();c.rect(L,T,w-L-R,h-T-B);c.clip();if(o.draw)o.draw(c,X,Y,w,h);c.restore();return {c,X,Y,w,h,L,R,T,B}}
+function dot(c,x,y,r,col,a){c.globalAlpha=a==null?1:a;c.fillStyle=col;c.beginPath();c.arc(x,y,r,0,7);c.fill();c.globalAlpha=1}
+function line(c,pts,col,lw,dash){c.strokeStyle=col;c.lineWidth=lw||2;c.setLineDash(dash||[]);c.beginPath();pts.forEach((p,i)=>i?c.lineTo(p[0],p[1]):c.moveTo(p[0],p[1]));c.stroke();c.setLineDash([]);c.lineWidth=1}
+const kfmt=v=>v>=1000?'$'+(v/1000).toFixed(0)+'k':'$'+v;
+
+const D={"per":{"2":{"p":[8491.0,8491.0,32264.5,8491.0,8491.0,8491.0,8491.0,8491.0,8491.0,8491.0,8491.0,32264.5,8491.0,8491.0,8491.0,32264.5,8491.0,8491.0,8491.0,8491.0,32264.5,32264.5,8491.0,8491.0,8491.0,8491.0,8491.0,8491.0,32264.5,8491.0,8491.0,8491.0,8491.0,8491.0,8491.0,8491.0,8491.0,8491.0,8491.0,32264.5,8491.0,32264.5,32264.5,8491.0,8491.0,8491.0,32264.5,8491.0,32264.5,8491.0,8491.0,32264.5,8491.0,8491.0,8491.0,32264.5,8491.0,8491.0,8491.0,8491.0,8491.0,8491.0,8491.0,8491.0,8491.0,8491.0,8491.0,32264.5,8491.0,8491.0,32264.5,8491.0,8491.0,8491.0,8491.0,8491.0,8491.0,8491.0,8491.0,8491.0,8491.0,8491.0,8491.0,8491.0,8491.0,8491.0,32264.5,8491.0,8491.0,32264.5,8491.0,8491.0,32264.5,8491.0,8491.0,8491.0,8491.0,32264.5,8491.0,8491.0,32264.5,8491.0,8491.0,8491.0,8491.0,8491.0,8491.0,8491.0,32264.5,32264.5,8491.0,8491.0,8491.0,8491.0,8491.0,8491.0,8491.0,8491.0,8491.0,8491.0,8491.0,8491.0,8491.0,8491.0,8491.0,8491.0,8491.0,32264.5,8491.0,32264.5,32264.5,32264.5,8491.0,8491.0,8491.0,8491.0,8491.0,8491.0,8491.0,8491.0,8491.0,32264.5,8491.0,8491.0,8491.0,8491.0,8491.0,8491.0,8491.0,8491.0,32264.5,8491.0,8491.0,8491.0,8491.0,8491.0,8491.0,8491.0,8491.0,8491.0,8491.0,8491.0,32264.5,8491.0,8491.0,8491.0,32264.5,8491.0,32264.5,8491.0,8491.0,8491.0,8491.0,32264.5,8491.0,32264.5,8491.0,8491.0,32264.5,8491.0,8491.0,8491.0,8491.0,8491.0,8491.0,8491.0,8491.0,32264.5,32264.5,8491.0,8491.0,8491.0,32264.5,32264.5,8491.0,8491.0,8491.0,8491.0,8491.0,32264.5,8491.0,8491.0,32264.5,8491.0,8491.0,8491.0,8491.0,32264.5,8491.0,8491.0,8491.0,32264.5,8491.0,32264.5,32264.5,8491.0,8491.0,8491.0,8491.0,32264.5,8491.0,32264.5,8491.0,8491.0,32264.5,8491.0,8491.0,8491.0,8491.0,32264.5,8491.0,32264.5,8491.0,8491.0,8491.0,8491.0,8491.0,8491.0,8491.0,32264.5,8491.0,32264.5,8491.0,8491.0,8491.0,8491.0,8491.0,8491.0,8491.0,8491.0,8491.0,32264.5,32264.5,8491.0,32264.5,32264.5,32264.5,32264.5,32264.5,8491.0,32264.5,8491.0,8491.0,8491.0,32264.5,8491.0,8491.0,8491.0],"rules":[["비흡연자",8490.98,855],["흡연자",32264.53,214]],"m":{"depth":1.0,"cv_fid_R2":0.7086553346051441,"fid_R2":0.6999387537234656,"fid_MAE":4768.284230036267,"MAE":5752.997629007145,"MAE_top10":10237.036599614064,"direct_MAE":5749.884223511006,"direct_MAE_top10":10123.490210057584,"under_rate":0.44776119402985076},"root":"흡연 여부"},"3":{"p":[8491.0,8491.0,41494.8,8491.0,8491.0,8491.0,8491.0,8491.0,8491.0,8491.0,8491.0,41494.8,8491.0,8491.0,8491.0,41494.8,8491.0,8491.0,8491.0,8491.0,41494.8,41494.8,8491.0,8491.0,8491.0,8491.0,8491.0,8491.0,41494.8,8491.0,8491.0,8491.0,8491.0,8491.0,8491.0,8491.0,8491.0,8491.0,8491.0,21338.9,8491.0,41494.8,41494.8,8491.0,8491.0,8491.0,21338.9,8491.0,41494.8,8491.0,8491.0,21338.9,8491.0,8491.0,8491.0,41494.8,8491.0,8491.0,8491.0,8491.0,8491.0,8491.0,8491.0,8491.0,8491.0,8491.0,8491.0,21338.9,8491.0,8491.0,21338.9,8491.0,8491.0,8491.0,8491.0,8491.0,8491.0,8491.0,8491.0,8491.0,8491.0,8491.0,8491.0,8491.0,8491.0,8491.0,21338.9,8491.0,8491.0,41494.8,8491.0,8491.0,21338.9,8491.0,8491.0,8491.0,8491.0,41494.8,8491.0,8491.0,41494.8,8491.0,8491.0,8491.0,8491.0,8491.0,8491.0,8491.0,41494.8,21338.9,8491.0,8491.0,8491.0,8491.0,8491.0,8491.0,8491.0,8491.0,8491.0,8491.0,8491.0,8491.0,8491.0,8491.0,8491.0,8491.0,8491.0,21338.9,8491.0,21338.9,21338.9,21338.9,8491.0,8491.0,8491.0,8491.0,8491.0,8491.0,8491.0,8491.0,8491.0,41494.8,8491.0,8491.0,8491.0,8491.0,8491.0,8491.0,8491.0,8491.0,41494.8,8491.0,8491.0,8491.0,8491.0,8491.0,8491.0,8491.0,8491.0,8491.0,8491.0,8491.0,21338.9,8491.0,8491.0,8491.0,41494.8,8491.0,41494.8,8491.0,8491.0,8491.0,8491.0,41494.8,8491.0,21338.9,8491.0,8491.0,21338.9,8491.0,8491.0,8491.0,8491.0,8491.0,8491.0,8491.0,8491.0,21338.9,21338.9,8491.0,8491.0,8491.0,21338.9,41494.8,8491.0,8491.0,8491.0,8491.0,8491.0,41494.8,8491.0,8491.0,21338.9,8491.0,8491.0,8491.0,8491.0,21338.9,8491.0,8491.0,8491.0,21338.9,8491.0,21338.9,41494.8,8491.0,8491.0,8491.0,8491.0,41494.8,8491.0,21338.9,8491.0,8491.0,41494.8,8491.0,8491.0,8491.0,8491.0,21338.9,8491.0,41494.8,8491.0,8491.0,8491.0,8491.0,8491.0,8491.0,8491.0,21338.9,8491.0,21338.9,8491.0,8491.0,8491.0,8491.0,8491.0,8491.0,8491.0,8491.0,8491.0,21338.9,21338.9,8491.0,41494.8,21338.9,21338.9,41494.8,41494.8,8491.0,21338.9,8491.0,8491.0,8491.0,21338.9,8491.0,8491.0,8491.0],"rules":[["비흡연자",8490.98,855],["흡연자 · BMI ≤ 30.01",21338.87,98],["흡연자 · BMI > 30.01",41494.83,116]],"m":{"depth":2.0,"cv_fid_R2":0.8654177532976896,"fid_R2":0.8791102175857456,"fid_MAE":3337.70346135079,"MAE":4476.241777018587,"MAE_top10":5382.468379119901,"direct_MAE":4476.130601630289,"direct_MAE_top10":5392.401060233061,"under_rate":0.43283582089552236},"root":"흡연 여부"},"4":{"p":[5452.3,5452.3,41494.8,12271.4,5452.3,12271.4,12271.4,5452.3,5452.3,12271.4,12271.4,41494.8,5452.3,5452.3,5452.3,41494.8,12271.4,12271.4,5452.3,5452.3,41494.8,41494.8,12271.4,5452.3,5452.3,5452.3,5452.3,12271.4,41494.8,5452.3,5452.3,5452.3,5452.3,12271.4,5452.3,5452.3,5452.3,12271.4,5452.3,21338.9,5452.3,41494.8,41494.8,12271.4,12271.4,12271.4,21338.9,5452.3,41494.8,5452.3,12271.4,21338.9,12271.4,5452.3,5452.3,41494.8,5452.3,5452.3,5452.3,5452.3,5452.3,12271.4,12271.4,5452.3,12271.4,5452.3,5452.3,21338.9,5452.3,5452.3,21338.9,5452.3,5452.3,12271.4,12271.4,12271.4,12271.4,5452.3,12271.4,5452.3,5452.3,5452.3,5452.3,5452.3,5452.3,12271.4,21338.9,5452.3,5452.3,41494.8,5452.3,5452.3,21338.9,5452.3,5452.3,12271.4,5452.3,41494.8,12271.4,12271.4,41494.8,12271.4,12271.4,12271.4,5452.3,5452.3,12271.4,5452.3,41494.8,21338.9,5452.3,12271.4,12271.4,5452.3,5452.3,5452.3,12271.4,12271.4,5452.3,5452.3,5452.3,12271.4,12271.4,12271.4,5452.3,12271.4,5452.3,21338.9,12271.4,21338.9,21338.9,21338.9,12271.4,5452.3,12271.4,5452.3,12271.4,12271.4,5452.3,12271.4,12271.4,41494.8,5452.3,5452.3,5452.3,12271.4,5452.3,5452.3,12271.4,12271.4,41494.8,12271.4,12271.4,12271.4,5452.3,12271.4,5452.3,5452.3,5452.3,12271.4,5452.3,5452.3,21338.9,12271.4,5452.3,12271.4,41494.8,12271.4,41494.8,5452.3,5452.3,12271.4,5452.3,41494.8,12271.4,21338.9,5452.3,5452.3,21338.9,5452.3,5452.3,12271.4,5452.3,12271.4,12271.4,5452.3,5452.3,21338.9,21338.9,12271.4,12271.4,12271.4,21338.9,41494.8,5452.3,12271.4,12271.4,12271.4,5452.3,41494.8,12271.4,5452.3,21338.9,5452.3,12271.4,5452.3,5452.3,21338.9,5452.3,5452.3,5452.3,21338.9,5452.3,21338.9,41494.8,5452.3,5452.3,5452.3,12271.4,41494.8,12271.4,21338.9,5452.3,5452.3,41494.8,5452.3,5452.3,5452.3,5452.3,21338.9,12271.4,41494.8,12271.4,5452.3,12271.4,5452.3,12271.4,5452.3,5452.3,21338.9,5452.3,21338.9,5452.3,5452.3,5452.3,12271.4,12271.4,12271.4,12271.4,5452.3,5452.3,21338.9,21338.9,12271.4,41494.8,21338.9,21338.9,41494.8,41494.8,5452.3,21338.9,12271.4,12271.4,12271.4,21338.9,5452.3,12271.4,12271.4],"rules":[["비흡연자 · 나이 ≤ 42.5",5452.28,474],["비흡연자 · 나이 > 42.5",12271.42,381],["흡연자 · BMI ≤ 30.01",21338.87,98],["흡연자 · BMI > 30.01",41494.83,116]],"m":{"depth":2.0,"cv_fid_R2":0.937464152741782,"fid_R2":0.9441097734728177,"fid_MAE":2063.3081054719223,"MAE":3403.4698530973924,"MAE_top10":5242.452280933412,"direct_MAE":3399.3883754162994,"direct_MAE_top10":5250.996485384507,"under_rate":0.35447761194029853},"root":"흡연 여부"},"5":{"p":[5452.3,5452.3,45151.3,12271.4,5452.3,12271.4,12271.4,5452.3,5452.3,12271.4,12271.4,45151.3,5452.3,5452.3,5452.3,45151.3,12271.4,12271.4,5452.3,5452.3,38310.2,45151.3,12271.4,5452.3,5452.3,5452.3,5452.3,12271.4,45151.3,5452.3,5452.3,5452.3,5452.3,12271.4,5452.3,5452.3,5452.3,12271.4,5452.3,21338.9,5452.3,38310.2,45151.3,12271.4,12271.4,12271.4,21338.9,5452.3,38310.2,5452.3,12271.4,21338.9,12271.4,5452.3,5452.3,38310.2,5452.3,5452.3,5452.3,5452.3,5452.3,12271.4,12271.4,5452.3,12271.4,5452.3,5452.3,21338.9,5452.3,5452.3,21338.9,5452.3,5452.3,12271.4,12271.4,12271.4,12271.4,5452.3,12271.4,5452.3,5452.3,5452.3,5452.3,5452.3,5452.3,12271.4,21338.9,5452.3,5452.3,38310.2,5452.3,5452.3,21338.9,5452.3,5452.3,12271.4,5452.3,38310.2,12271.4,12271.4,38310.2,12271.4,12271.4,12271.4,5452.3,5452.3,12271.4,5452.3,45151.3,21338.9,5452.3,12271.4,12271.4,5452.3,5452.3,5452.3,12271.4,12271.4,5452.3,5452.3,5452.3,12271.4,12271.4,12271.4,5452.3,12271.4,5452.3,21338.9,12271.4,21338.9,21338.9,21338.9,12271.4,5452.3,12271.4,5452.3,12271.4,12271.4,5452.3,12271.4,12271.4,45151.3,5452.3,5452.3,5452.3,12271.4,5452.3,5452.3,12271.4,12271.4,45151.3,12271.4,12271.4,12271.4,5452.3,12271.4,5452.3,5452.3,5452.3,12271.4,5452.3,5452.3,21338.9,12271.4,5452.3,12271.4,38310.2,12271.4,38310.2,5452.3,5452.3,12271.4,5452.3,38310.2,12271.4,21338.9,5452.3,5452.3,21338.9,5452.3,5452.3,12271.4,5452.3,12271.4,12271.4,5452.3,5452.3,21338.9,21338.9,12271.4,12271.4,12271.4,21338.9,38310.2,5452.3,12271.4,12271.4,12271.4,5452.3,38310.2,12271.4,5452.3,21338.9,5452.3,12271.4,5452.3,5452.3,21338.9,5452.3,5452.3,5452.3,21338.9,5452.3,21338.9,45151.3,5452.3,5452.3,5452.3,12271.4,45151.3,12271.4,21338.9,5452.3,5452.3,38310.2,5452.3,5452.3,5452.3,5452.3,21338.9,12271.4,38310.2,12271.4,5452.3,12271.4,5452.3,12271.4,5452.3,5452.3,21338.9,5452.3,21338.9,5452.3,5452.3,5452.3,12271.4,12271.4,12271.4,12271.4,5452.3,5452.3,21338.9,21338.9,12271.4,38310.2,21338.9,21338.9,45151.3,38310.2,5452.3,21338.9,12271.4,12271.4,12271.4,21338.9,5452.3,12271.4,12271.4],"rules":[["비흡연자 · 나이 ≤ 42.5",5452.28,474],["비흡연자 · 나이 > 42.5",12271.42,381],["흡연자 · BMI ≤ 30.01",21338.87,98],["흡연자 · BMI > 30.01 · 나이 ≤ 41.5",38310.21,62],["흡연자 · BMI > 30.01 · 나이 > 41.5",45151.25,54]],"m":{"depth":3.0,"cv_fid_R2":0.9448827378788779,"fid_R2":0.9556257553896972,"fid_MAE":1891.721531988254,"MAE":3241.2390581463055,"MAE_top10":4103.95743589439,"direct_MAE":3257.084898069643,"direct_MAE_top10":4288.709909210387,"under_rate":0.3656716417910448},"root":"흡연 여부"},"6":{"p":[5452.3,5452.3,45151.3,11303.7,5452.3,11303.7,11303.7,5452.3,5452.3,11303.7,15311.2,45151.3,5452.3,5452.3,5452.3,45151.3,11303.7,11303.7,5452.3,5452.3,38310.2,45151.3,11303.7,5452.3,5452.3,5452.3,5452.3,11303.7,45151.3,5452.3,5452.3,5452.3,5452.3,15311.2,5452.3,5452.3,5452.3,11303.7,5452.3,21338.9,5452.3,38310.2,45151.3,11303.7,15311.2,11303.7,21338.9,5452.3,38310.2,5452.3,15311.2,21338.9,11303.7,5452.3,5452.3,38310.2,5452.3,5452.3,5452.3,5452.3,5452.3,11303.7,15311.2,5452.3,11303.7,5452.3,5452.3,21338.9,5452.3,5452.3,21338.9,5452.3,5452.3,11303.7,11303.7,11303.7,15311.2,5452.3,11303.7,5452.3,5452.3,5452.3,5452.3,5452.3,5452.3,11303.7,21338.9,5452.3,5452.3,38310.2,5452.3,5452.3,21338.9,5452.3,5452.3,11303.7,5452.3,38310.2,11303.7,11303.7,38310.2,11303.7,15311.2,11303.7,5452.3,5452.3,11303.7,5452.3,45151.3,21338.9,5452.3,11303.7,11303.7,5452.3,5452.3,5452.3,15311.2,15311.2,5452.3,5452.3,5452.3,11303.7,11303.7,15311.2,5452.3,11303.7,5452.3,21338.9,11303.7,21338.9,21338.9,21338.9,15311.2,5452.3,11303.7,5452.3,11303.7,11303.7,5452.3,11303.7,11303.7,45151.3,5452.3,5452.3,5452.3,11303.7,5452.3,5452.3,11303.7,15311.2,45151.3,11303.7,15311.2,15311.2,5452.3,11303.7,5452.3,5452.3,5452.3,11303.7,5452.3,5452.3,21338.9,11303.7,5452.3,11303.7,38310.2,11303.7,38310.2,5452.3,5452.3,11303.7,5452.3,38310.2,11303.7,21338.9,5452.3,5452.3,21338.9,5452.3,5452.3,11303.7,5452.3,15311.2,11303.7,5452.3,5452.3,21338.9,21338.9,11303.7,11303.7,11303.7,21338.9,38310.2,5452.3,11303.7,11303.7,11303.7,5452.3,38310.2,11303.7,5452.3,21338.9,5452.3,11303.7,5452.3,5452.3,21338.9,5452.3,5452.3,5452.3,21338.9,5452.3,21338.9,45151.3,5452.3,5452.3,5452.3,11303.7,45151.3,11303.7,21338.9,5452.3,5452.3,38310.2,5452.3,5452.3,5452.3,5452.3,21338.9,11303.7,38310.2,11303.7,5452.3,11303.7,5452.3,11303.7,5452.3,5452.3,21338.9,5452.3,21338.9,5452.3,5452.3,5452.3,11303.7,11303.7,11303.7,11303.7,5452.3,5452.3,21338.9,21338.9,11303.7,38310.2,21338.9,21338.9,45151.3,38310.2,5452.3,21338.9,11303.7,11303.7,11303.7,21338.9,5452.3,15311.2,11303.7],"rules":[["비흡연자 · 나이 ≤ 42.5",5452.28,474],["비흡연자 · 나이 > 42.5 · 나이 ≤ 58.5",11303.73,289],["비흡연자 · 나이 > 42.5 · 나이 > 58.5",15311.21,92],["흡연자 · BMI ≤ 30.01",21338.87,98],["흡연자 · BMI > 30.01 · 나이 ≤ 41.5",38310.21,62],["흡연자 · BMI > 30.01 · 나이 > 41.5",45151.25,54]],"m":{"depth":3.0,"cv_fid_R2":0.9508141007572458,"fid_R2":0.9607096094442733,"fid_MAE":1749.8954171740597,"MAE":3113.4140354308242,"MAE_top10":4139.797646533209,"direct_MAE":3108.6560128183482,"direct_MAE_top10":4258.705339992435,"under_rate":0.3619402985074627},"root":"흡연 여부"},"7":{"p":[5452.3,5452.3,45151.3,11303.7,5452.3,11303.7,11303.7,5452.3,5452.3,11303.7,15311.2,45151.3,5452.3,5452.3,5452.3,45151.3,11303.7,11303.7,5452.3,5452.3,38310.2,45151.3,11303.7,5452.3,5452.3,5452.3,5452.3,11303.7,45151.3,5452.3,5452.3,5452.3,5452.3,15311.2,5452.3,5452.3,5452.3,11303.7,5452.3,24941.7,5452.3,38310.2,45151.3,11303.7,15311.2,11303.7,24941.7,5452.3,38310.2,5452.3,15311.2,24941.7,11303.7,5452.3,5452.3,38310.2,5452.3,5452.3,5452.3,5452.3,5452.3,11303.7,15311.2,5452.3,11303.7,5452.3,5452.3,24941.7,5452.3,5452.3,18522.1,5452.3,5452.3,11303.7,11303.7,11303.7,15311.2,5452.3,11303.7,5452.3,5452.3,5452.3,5452.3,5452.3,5452.3,11303.7,18522.1,5452.3,5452.3,38310.2,5452.3,5452.3,18522.1,5452.3,5452.3,11303.7,5452.3,38310.2,11303.7,11303.7,38310.2,11303.7,15311.2,11303.7,5452.3,5452.3,11303.7,5452.3,45151.3,24941.7,5452.3,11303.7,11303.7,5452.3,5452.3,5452.3,15311.2,15311.2,5452.3,5452.3,5452.3,11303.7,11303.7,15311.2,5452.3,11303.7,5452.3,18522.1,11303.7,24941.7,18522.1,18522.1,15311.2,5452.3,11303.7,5452.3,11303.7,11303.7,5452.3,11303.7,11303.7,45151.3,5452.3,5452.3,5452.3,11303.7,5452.3,5452.3,11303.7,15311.2,45151.3,11303.7,15311.2,15311.2,5452.3,11303.7,5452.3,5452.3,5452.3,11303.7,5452.3,5452.3,24941.7,11303.7,5452.3,11303.7,38310.2,11303.7,38310.2,5452.3,5452.3,11303.7,5452.3,38310.2,11303.7,24941.7,5452.3,5452.3,18522.1,5452.3,5452.3,11303.7,5452.3,15311.2,11303.7,5452.3,5452.3,18522.1,24941.7,11303.7,11303.7,11303.7,18522.1,38310.2,5452.3,11303.7,11303.7,11303.7,5452.3,38310.2,11303.7,5452.3,24941.7,5452.3,11303.7,5452.3,5452.3,18522.1,5452.3,5452.3,5452.3,24941.7,5452.3,24941.7,45151.3,5452.3,5452.3,5452.3,11303.7,45151.3,11303.7,18522.1,5452.3,5452.3,38310.2,5452.3,5452.3,5452.3,5452.3,18522.1,11303.7,38310.2,11303.7,5452.3,11303.7,5452.3,11303.7,5452.3,5452.3,18522.1,5452.3,24941.7,5452.3,5452.3,5452.3,11303.7,11303.7,11303.7,11303.7,5452.3,5452.3,18522.1,18522.1,11303.7,38310.2,18522.1,18522.1,45151.3,38310.2,5452.3,24941.7,11303.7,11303.7,11303.7,18522.1,5452.3,15311.2,11303.7],"rules":[["비흡연자 · 나이 ≤ 42.5",5452.28,474],["비흡연자 · 나이 > 42.5 · 나이 ≤ 58.5",11303.73,289],["비흡연자 · 나이 > 42.5 · 나이 > 58.5",15311.21,92],["흡연자 · BMI ≤ 30.01 · 나이 ≤ 41",18522.13,55],["흡연자 · BMI ≤ 30.01 · 나이 > 41",24941.68,43],["흡연자 · BMI > 30.01 · 나이 ≤ 41.5",38310.21,62],["흡연자 · BMI > 30.01 · 나이 > 41.5",45151.25,54]],"m":{"depth":3.0,"cv_fid_R2":0.9595053906160903,"fid_R2":0.9715311041053095,"fid_MAE":1554.1472889335187,"MAE":2963.206175166581,"MAE_top10":4110.684039108977,"direct_MAE":2978.7752808321525,"direct_MAE_top10":4293.092402302198,"under_rate":0.3694029850746269},"root":"흡연 여부"},"8":{"p":[3510.1,6283.0,45151.3,11303.7,6283.0,11303.7,11303.7,6283.0,6283.0,11303.7,15311.2,45151.3,6283.0,3510.1,6283.0,45151.3,11303.7,11303.7,3510.1,3510.1,38310.2,45151.3,11303.7,3510.1,6283.0,3510.1,6283.0,11303.7,45151.3,6283.0,6283.0,3510.1,3510.1,15311.2,6283.0,6283.0,6283.0,11303.7,3510.1,24941.7,6283.0,38310.2,45151.3,11303.7,15311.2,11303.7,24941.7,6283.0,38310.2,3510.1,15311.2,24941.7,11303.7,6283.0,6283.0,38310.2,6283.0,6283.0,3510.1,6283.0,3510.1,11303.7,15311.2,3510.1,11303.7,6283.0,6283.0,24941.7,6283.0,6283.0,18522.1,6283.0,6283.0,11303.7,11303.7,11303.7,15311.2,6283.0,11303.7,3510.1,3510.1,6283.0,3510.1,3510.1,6283.0,11303.7,18522.1,6283.0,6283.0,38310.2,6283.0,6283.0,18522.1,6283.0,6283.0,11303.7,3510.1,38310.2,11303.7,11303.7,38310.2,11303.7,15311.2,11303.7,6283.0,6283.0,11303.7,6283.0,45151.3,24941.7,3510.1,11303.7,11303.7,6283.0,6283.0,3510.1,15311.2,15311.2,6283.0,6283.0,6283.0,11303.7,11303.7,15311.2,6283.0,11303.7,3510.1,18522.1,11303.7,24941.7,18522.1,18522.1,15311.2,6283.0,11303.7,6283.0,11303.7,11303.7,6283.0,11303.7,11303.7,45151.3,3510.1,6283.0,6283.0,11303.7,6283.0,6283.0,11303.7,15311.2,45151.3,11303.7,15311.2,15311.2,6283.0,11303.7,6283.0,6283.0,3510.1,11303.7,6283.0,6283.0,24941.7,11303.7,6283.0,11303.7,38310.2,11303.7,38310.2,6283.0,6283.0,11303.7,6283.0,38310.2,11303.7,24941.7,6283.0,6283.0,18522.1,6283.0,6283.0,11303.7,6283.0,15311.2,11303.7,6283.0,6283.0,18522.1,24941.7,11303.7,11303.7,11303.7,18522.1,38310.2,6283.0,11303.7,11303.7,11303.7,6283.0,38310.2,11303.7,6283.0,24941.7,6283.0,11303.7,6283.0,3510.1,18522.1,6283.0,3510.1,3510.1,24941.7,3510.1,24941.7,45151.3,6283.0,6283.0,6283.0,11303.7,45151.3,11303.7,18522.1,6283.0,3510.1,38310.2,3510.1,6283.0,6283.0,6283.0,18522.1,11303.7,38310.2,11303.7,6283.0,11303.7,6283.0,11303.7,6283.0,6283.0,18522.1,3510.1,24941.7,6283.0,6283.0,6283.0,11303.7,11303.7,11303.7,11303.7,3510.1,6283.0,18522.1,18522.1,11303.7,38310.2,18522.1,18522.1,45151.3,38310.2,3510.1,24941.7,11303.7,11303.7,11303.7,18522.1,6283.0,15311.2,11303.7],"rules":[["비흡연자 · 나이 ≤ 42.5 · 나이 ≤ 22.5",3510.06,142],["비흡연자 · 나이 ≤ 42.5 · 나이 > 22.5",6282.99,332],["비흡연자 · 나이 > 42.5 · 나이 ≤ 58.5",11303.73,289],["비흡연자 · 나이 > 42.5 · 나이 > 58.5",15311.21,92],["흡연자 · BMI ≤ 30.01 · 나이 ≤ 41",18522.13,55],["흡연자 · BMI ≤ 30.01 · 나이 > 41",24941.68,43],["흡연자 · BMI > 30.01 · 나이 ≤ 41.5",38310.21,62],["흡연자 · BMI > 30.01 · 나이 > 41.5",45151.25,54]],"m":{"depth":3.0,"cv_fid_R2":0.9648659178326463,"fid_R2":0.9744264089168707,"fid_MAE":1449.0753714616844,"MAE":2839.142176007807,"MAE_top10":4110.684039108977,"direct_MAE":2849.8065474781847,"direct_MAE_top10":4293.092402302198,"under_rate":0.33955223880597013},"root":"흡연 여부"},"9":{"p":[3510.1,6283.0,45151.3,12574.2,6283.0,10307.7,10307.7,6283.0,6283.0,10307.7,15311.2,45151.3,6283.0,3510.1,6283.0,45151.3,12574.2,12574.2,3510.1,3510.1,38310.2,45151.3,10307.7,3510.1,6283.0,3510.1,6283.0,10307.7,45151.3,6283.0,6283.0,3510.1,3510.1,15311.2,6283.0,6283.0,6283.0,10307.7,3510.1,24941.7,6283.0,38310.2,45151.3,12574.2,15311.2,10307.7,24941.7,6283.0,38310.2,3510.1,15311.2,24941.7,12574.2,6283.0,6283.0,38310.2,6283.0,6283.0,3510.1,6283.0,3510.1,10307.7,15311.2,3510.1,10307.7,6283.0,6283.0,24941.7,6283.0,6283.0,18522.1,6283.0,6283.0,12574.2,10307.7,10307.7,15311.2,6283.0,12574.2,3510.1,3510.1,6283.0,3510.1,3510.1,6283.0,12574.2,18522.1,6283.0,6283.0,38310.2,6283.0,6283.0,18522.1,6283.0,6283.0,12574.2,3510.1,38310.2,12574.2,10307.7,38310.2,12574.2,15311.2,12574.2,6283.0,6283.0,12574.2,6283.0,45151.3,24941.7,3510.1,10307.7,10307.7,6283.0,6283.0,3510.1,15311.2,15311.2,6283.0,6283.0,6283.0,12574.2,10307.7,15311.2,6283.0,10307.7,3510.1,18522.1,12574.2,24941.7,18522.1,18522.1,15311.2,6283.0,10307.7,6283.0,10307.7,10307.7,6283.0,10307.7,12574.2,45151.3,3510.1,6283.0,6283.0,12574.2,6283.0,6283.0,10307.7,15311.2,45151.3,10307.7,15311.2,15311.2,6283.0,10307.7,6283.0,6283.0,3510.1,10307.7,6283.0,6283.0,24941.7,12574.2,6283.0,12574.2,38310.2,12574.2,38310.2,6283.0,6283.0,10307.7,6283.0,38310.2,10307.7,24941.7,6283.0,6283.0,18522.1,6283.0,6283.0,10307.7,6283.0,15311.2,12574.2,6283.0,6283.0,18522.1,24941.7,12574.2,10307.7,10307.7,18522.1,38310.2,6283.0,10307.7,12574.2,10307.7,6283.0,38310.2,10307.7,6283.0,24941.7,6283.0,12574.2,6283.0,3510.1,18522.1,6283.0,3510.1,3510.1,24941.7,3510.1,24941.7,45151.3,6283.0,6283.0,6283.0,12574.2,45151.3,12574.2,18522.1,6283.0,3510.1,38310.2,3510.1,6283.0,6283.0,6283.0,18522.1,12574.2,38310.2,10307.7,6283.0,12574.2,6283.0,12574.2,6283.0,6283.0,18522.1,3510.1,24941.7,6283.0,6283.0,6283.0,12574.2,12574.2,12574.2,10307.7,3510.1,6283.0,18522.1,18522.1,10307.7,38310.2,18522.1,18522.1,45151.3,38310.2,3510.1,24941.7,10307.7,10307.7,12574.2,18522.1,6283.0,15311.2,12574.2],"rules":[["비흡연자 · 나이 ≤ 42.5 · 나이 ≤ 22.5",3510.06,142],["비흡연자 · 나이 ≤ 42.5 · 나이 > 22.5",6282.99,332],["비흡연자 · 나이 > 42.5 · 나이 ≤ 58.5 · 나이 ≤ 51.5",10307.74,162],["비흡연자 · 나이 > 42.5 · 나이 ≤ 58.5 · 나이 > 51.5",12574.22,127],["비흡연자 · 나이 > 42.5 · 나이 > 58.5",15311.21,92],["흡연자 · BMI ≤ 30.01 · 나이 ≤ 41",18522.13,55],["흡연자 · BMI ≤ 30.01 · 나이 > 41",24941.68,43],["흡연자 · BMI > 30.01 · 나이 ≤ 41.5",38310.21,62],["흡연자 · BMI > 30.01 · 나이 > 41.5",45151.25,54]],"m":{"depth":4.0,"cv_fid_R2":0.9682701466535609,"fid_R2":0.9765002607852703,"fid_MAE":1372.0606486304434,"MAE":2762.9189281182566,"MAE_top10":4063.629103812846,"direct_MAE":2839.932674698717,"direct_MAE_top10":4293.092402302198,"under_rate":0.30597014925373134},"root":"흡연 여부"},"10":{"p":[3510.1,6283.0,45151.3,12574.2,6283.0,10307.7,10307.7,6283.0,6283.0,10307.7,15311.2,45151.3,6283.0,3510.1,6283.0,45151.3,12574.2,12574.2,3510.1,3510.1,40580.1,45151.3,10307.7,3510.1,6283.0,3510.1,6283.0,10307.7,45151.3,6283.0,6283.0,3510.1,3510.1,15311.2,6283.0,6283.0,6283.0,10307.7,3510.1,24941.7,6283.0,36040.4,45151.3,12574.2,15311.2,10307.7,24941.7,6283.0,40580.1,3510.1,15311.2,24941.7,12574.2,6283.0,6283.0,36040.4,6283.0,6283.0,3510.1,6283.0,3510.1,10307.7,15311.2,3510.1,10307.7,6283.0,6283.0,24941.7,6283.0,6283.0,18522.1,6283.0,6283.0,12574.2,10307.7,10307.7,15311.2,6283.0,12574.2,3510.1,3510.1,6283.0,3510.1,3510.1,6283.0,12574.2,18522.1,6283.0,6283.0,40580.1,6283.0,6283.0,18522.1,6283.0,6283.0,12574.2,3510.1,36040.4,12574.2,10307.7,40580.1,12574.2,15311.2,12574.2,6283.0,6283.0,12574.2,6283.0,45151.3,24941.7,3510.1,10307.7,10307.7,6283.0,6283.0,3510.1,15311.2,15311.2,6283.0,6283.0,6283.0,12574.2,10307.7,15311.2,6283.0,10307.7,3510.1,18522.1,12574.2,24941.7,18522.1,18522.1,15311.2,6283.0,10307.7,6283.0,10307.7,10307.7,6283.0,10307.7,12574.2,45151.3,3510.1,6283.0,6283.0,12574.2,6283.0,6283.0,10307.7,15311.2,45151.3,10307.7,15311.2,15311.2,6283.0,10307.7,6283.0,6283.0,3510.1,10307.7,6283.0,6283.0,24941.7,12574.2,6283.0,12574.2,40580.1,12574.2,36040.4,6283.0,6283.0,10307.7,6283.0,36040.4,10307.7,24941.7,6283.0,6283.0,18522.1,6283.0,6283.0,10307.7,6283.0,15311.2,12574.2,6283.0,6283.0,18522.1,24941.7,12574.2,10307.7,10307.7,18522.1,36040.4,6283.0,10307.7,12574.2,10307.7,6283.0,36040.4,10307.7,6283.0,24941.7,6283.0,12574.2,6283.0,3510.1,18522.1,6283.0,3510.1,3510.1,24941.7,3510.1,24941.7,45151.3,6283.0,6283.0,6283.0,12574.2,45151.3,12574.2,18522.1,6283.0,3510.1,36040.4,3510.1,6283.0,6283.0,6283.0,18522.1,12574.2,36040.4,10307.7,6283.0,12574.2,6283.0,12574.2,6283.0,6283.0,18522.1,3510.1,24941.7,6283.0,6283.0,6283.0,12574.2,12574.2,12574.2,10307.7,3510.1,6283.0,18522.1,18522.1,10307.7,36040.4,18522.1,18522.1,45151.3,40580.1,3510.1,24941.7,10307.7,10307.7,12574.2,18522.1,6283.0,15311.2,12574.2],"rules":[["비흡연자 · 나이 ≤ 42.5 · 나이 ≤ 22.5",3510.06,142],["비흡연자 · 나이 ≤ 42.5 · 나이 > 22.5",6282.99,332],["비흡연자 · 나이 > 42.5 · 나이 ≤ 58.5 · 나이 ≤ 51.5",10307.74,162],["비흡연자 · 나이 > 42.5 · 나이 ≤ 58.5 · 나이 > 51.5",12574.22,127],["비흡연자 · 나이 > 42.5 · 나이 > 58.5",15311.21,92],["흡연자 · BMI ≤ 30.01 · 나이 ≤ 41",18522.13,55],["흡연자 · BMI ≤ 30.01 · 나이 > 41",24941.68,43],["흡연자 · BMI > 30.01 · 나이 ≤ 41.5 · 나이 ≤ 27.5",36040.35,31],["흡연자 · BMI > 30.01 · 나이 ≤ 41.5 · 나이 > 27.5",40580.07,31],["흡연자 · BMI > 30.01 · 나이 > 41.5",45151.25,54]],"m":{"depth":4.0,"cv_fid_R2":0.9704034354539263,"fid_R2":0.9786662012677039,"fid_MAE":1320.8249108141968,"MAE":2751.5014449973773,"MAE_top10":4286.575631736151,"direct_MAE":2830.446076271295,"direct_MAE_top10":4607.343545711923,"under_rate":0.2947761194029851},"root":"흡연 여부"},"11":{"p":[3510.1,5710.7,45151.3,12574.2,5710.7,10307.7,10307.7,5710.7,5710.7,10307.7,15311.2,45151.3,5710.7,3510.1,5710.7,45151.3,12574.2,12574.2,3510.1,3510.1,40580.1,45151.3,10307.7,3510.1,7669.4,3510.1,5710.7,10307.7,45151.3,5710.7,7669.4,3510.1,3510.1,15311.2,5710.7,5710.7,7669.4,10307.7,3510.1,24941.7,7669.4,36040.4,45151.3,12574.2,15311.2,10307.7,24941.7,5710.7,40580.1,3510.1,15311.2,24941.7,12574.2,5710.7,5710.7,36040.4,5710.7,5710.7,3510.1,5710.7,3510.1,10307.7,15311.2,3510.1,10307.7,5710.7,7669.4,24941.7,5710.7,5710.7,18522.1,5710.7,7669.4,12574.2,10307.7,10307.7,15311.2,5710.7,12574.2,3510.1,3510.1,5710.7,3510.1,3510.1,5710.7,12574.2,18522.1,7669.4,5710.7,40580.1,5710.7,7669.4,18522.1,7669.4,5710.7,12574.2,3510.1,36040.4,12574.2,10307.7,40580.1,12574.2,15311.2,12574.2,5710.7,5710.7,12574.2,5710.7,45151.3,24941.7,3510.1,10307.7,10307.7,7669.4,7669.4,3510.1,15311.2,15311.2,5710.7,5710.7,7669.4,12574.2,10307.7,15311.2,7669.4,10307.7,3510.1,18522.1,12574.2,24941.7,18522.1,18522.1,15311.2,5710.7,10307.7,5710.7,10307.7,10307.7,5710.7,10307.7,12574.2,45151.3,3510.1,5710.7,7669.4,12574.2,5710.7,7669.4,10307.7,15311.2,45151.3,10307.7,15311.2,15311.2,7669.4,10307.7,7669.4,5710.7,3510.1,10307.7,5710.7,7669.4,24941.7,12574.2,5710.7,12574.2,40580.1,12574.2,36040.4,5710.7,7669.4,10307.7,5710.7,36040.4,10307.7,24941.7,5710.7,5710.7,18522.1,5710.7,5710.7,10307.7,5710.7,15311.2,12574.2,5710.7,5710.7,18522.1,24941.7,12574.2,10307.7,10307.7,18522.1,36040.4,5710.7,10307.7,12574.2,10307.7,5710.7,36040.4,10307.7,7669.4,24941.7,7669.4,12574.2,5710.7,3510.1,18522.1,5710.7,3510.1,3510.1,24941.7,3510.1,24941.7,45151.3,5710.7,7669.4,7669.4,12574.2,45151.3,12574.2,18522.1,5710.7,3510.1,36040.4,3510.1,5710.7,7669.4,7669.4,18522.1,12574.2,36040.4,10307.7,5710.7,12574.2,7669.4,12574.2,5710.7,5710.7,18522.1,3510.1,24941.7,5710.7,5710.7,7669.4,12574.2,12574.2,12574.2,10307.7,3510.1,5710.7,18522.1,18522.1,10307.7,36040.4,18522.1,18522.1,45151.3,40580.1,3510.1,24941.7,10307.7,10307.7,12574.2,18522.1,5710.7,15311.2,12574.2],"rules":[["비흡연자 · 나이 ≤ 42.5 · 나이 ≤ 22.5",3510.06,142],["비흡연자 · 나이 ≤ 42.5 · 나이 > 22.5 · 나이 ≤ 36.5",5710.72,235],["비흡연자 · 나이 ≤ 42.5 · 나이 > 22.5 · 나이 > 36.5",7669.41,97],["비흡연자 · 나이 > 42.5 · 나이 ≤ 58.5 · 나이 ≤ 51.5",10307.74,162],["비흡연자 · 나이 > 42.5 · 나이 ≤ 58.5 · 나이 > 51.5",12574.22,127],["비흡연자 · 나이 > 42.5 · 나이 > 58.5",15311.21,92],["흡연자 · BMI ≤ 30.01 · 나이 ≤ 41",18522.13,55],["흡연자 · BMI ≤ 30.01 · 나이 > 41",24941.68,43],["흡연자 · BMI > 30.01 · 나이 ≤ 41.5 · 나이 ≤ 27.5",36040.35,31],["흡연자 · BMI > 30.01 · 나이 ≤ 41.5 · 나이 > 27.5",40580.07,31],["흡연자 · BMI > 30.01 · 나이 > 41.5",45151.25,54]],"m":{"depth":4.0,"cv_fid_R2":0.9709384068029632,"fid_R2":0.980895483811071,"fid_MAE":1228.5127756910636,"MAE":2723.981343277619,"MAE_top10":4286.575631736151,"direct_MAE":2757.6064759558244,"direct_MAE_top10":4561.03432634471,"under_rate":0.2462686567164179},"root":"흡연 여부"},"12":{"p":[3510.1,5710.7,45151.3,12574.2,5710.7,10307.7,10307.7,5710.7,5710.7,10307.7,15142.8,45151.3,5710.7,3510.1,5710.7,45151.3,12574.2,12574.2,3510.1,3510.1,40580.1,45151.3,10307.7,3510.1,7669.4,3510.1,5710.7,10307.7,45151.3,5710.7,7669.4,3510.1,3510.1,15142.8,5710.7,5710.7,7669.4,10307.7,3510.1,24941.7,7669.4,36040.4,45151.3,12574.2,15142.8,10307.7,24941.7,5710.7,40580.1,3510.1,15142.8,24941.7,12574.2,5710.7,5710.7,36040.4,5710.7,5710.7,3510.1,5710.7,3510.1,10307.7,15142.8,3510.1,10307.7,5710.7,7669.4,24941.7,5710.7,5710.7,18522.1,5710.7,7669.4,12574.2,10307.7,10307.7,15142.8,5710.7,12574.2,3510.1,3510.1,5710.7,3510.1,3510.1,5710.7,12574.2,18522.1,7669.4,5710.7,40580.1,5710.7,7669.4,18522.1,7669.4,5710.7,12574.2,3510.1,36040.4,12574.2,10307.7,40580.1,12574.2,15142.8,12574.2,5710.7,5710.7,12574.2,5710.7,45151.3,24941.7,3510.1,10307.7,10307.7,7669.4,7669.4,3510.1,15142.8,15142.8,5710.7,5710.7,7669.4,12574.2,10307.7,15142.8,7669.4,10307.7,3510.1,18522.1,12574.2,24941.7,18522.1,18522.1,15142.8,5710.7,10307.7,5710.7,10307.7,10307.7,5710.7,10307.7,12574.2,45151.3,3510.1,5710.7,7669.4,12574.2,5710.7,7669.4,10307.7,15142.8,45151.3,10307.7,15142.8,15142.8,7669.4,10307.7,7669.4,5710.7,3510.1,10307.7,5710.7,7669.4,24941.7,12574.2,5710.7,12574.2,40580.1,12574.2,36040.4,5710.7,7669.4,10307.7,5710.7,36040.4,10307.7,24941.7,5710.7,5710.7,18522.1,5710.7,5710.7,10307.7,5710.7,15142.8,12574.2,5710.7,5710.7,18522.1,24941.7,12574.2,10307.7,10307.7,18522.1,36040.4,5710.7,10307.7,12574.2,10307.7,5710.7,36040.4,10307.7,7669.4,24941.7,7669.4,12574.2,5710.7,3510.1,18522.1,5710.7,3510.1,3510.1,24941.7,3510.1,24941.7,45151.3,5710.7,7669.4,7669.4,12574.2,45151.3,12574.2,18522.1,5710.7,3510.1,36040.4,3510.1,5710.7,7669.4,7669.4,18522.1,12574.2,36040.4,10307.7,5710.7,12574.2,7669.4,12574.2,5710.7,5710.7,18522.1,3510.1,24941.7,5710.7,5710.7,7669.4,12574.2,12574.2,12574.2,10307.7,3510.1,5710.7,18522.1,18522.1,10307.7,36040.4,18522.1,18522.1,45151.3,40580.1,3510.1,24941.7,10307.7,10307.7,12574.2,18522.1,5710.7,15142.8,12574.2],"rules":[["비흡연자 · 나이 ≤ 42.5 · 나이 ≤ 22.5",3510.06,142],["비흡연자 · 나이 ≤ 42.5 · 나이 > 22.5 · 나이 ≤ 36.5",5710.72,235],["비흡연자 · 나이 ≤ 42.5 · 나이 > 22.5 · 나이 > 36.5",7669.41,97],["비흡연자 · 나이 > 42.5 · 나이 ≤ 58.5 · 나이 ≤ 51.5",10307.74,162],["비흡연자 · 나이 > 42.5 · 나이 ≤ 58.5 · 나이 > 51.5",12574.22,127],["비흡연자 · 나이 > 42.5 · 나이 > 58.5 · 자녀 ≤ 3.5",15142.81,91],["흡연자 · BMI ≤ 30.01 · 나이 ≤ 41",18522.13,55],["흡연자 · BMI ≤ 30.01 · 나이 > 41",24941.68,43],["비흡연자 · 나이 > 42.5 · 나이 > 58.5 · 자녀 > 3.5",30636.18,1],["흡연자 · BMI > 30.01 · 나이 ≤ 41.5 · 나이 ≤ 27.5",36040.35,31],["흡연자 · BMI > 30.01 · 나이 ≤ 41.5 · 나이 > 27.5",40580.07,31],["흡연자 · BMI > 30.01 · 나이 > 41.5",45151.25,54]],"m":{"depth":4.0,"cv_fid_R2":0.9728089354406373,"fid_R2":0.9809120845357848,"fid_MAE":1228.0591276780888,"MAE":2716.440767660205,"MAE_top10":4286.575631736151,"direct_MAE":2756.9873410522655,"direct_MAE_top10":4554.888839153825,"under_rate":0.2462686567164179},"root":"흡연 여부"},"13":{"p":[3510.1,6929.8,45151.3,12574.2,6929.8,10307.7,10307.7,4967.6,6929.8,10307.7,15142.8,45151.3,4967.6,3510.1,4967.6,45151.3,12574.2,12574.2,3510.1,3510.1,40580.1,45151.3,10307.7,3510.1,7669.4,3510.1,4967.6,10307.7,45151.3,4967.6,7669.4,3510.1,3510.1,15142.8,4967.6,6929.8,7669.4,10307.7,3510.1,24941.7,7669.4,36040.4,45151.3,12574.2,15142.8,10307.7,24941.7,4967.6,40580.1,3510.1,15142.8,24941.7,12574.2,4967.6,4967.6,36040.4,4967.6,4967.6,3510.1,6929.8,3510.1,10307.7,15142.8,3510.1,10307.7,4967.6,7669.4,24941.7,6929.8,4967.6,18522.1,4967.6,7669.4,12574.2,10307.7,10307.7,15142.8,4967.6,12574.2,3510.1,3510.1,4967.6,3510.1,3510.1,6929.8,12574.2,18522.1,7669.4,6929.8,40580.1,4967.6,7669.4,18522.1,7669.4,4967.6,12574.2,3510.1,36040.4,12574.2,10307.7,40580.1,12574.2,15142.8,12574.2,4967.6,4967.6,12574.2,4967.6,45151.3,24941.7,3510.1,10307.7,10307.7,7669.4,7669.4,3510.1,15142.8,15142.8,4967.6,6929.8,7669.4,12574.2,10307.7,15142.8,7669.4,10307.7,3510.1,18522.1,12574.2,24941.7,18522.1,18522.1,15142.8,4967.6,10307.7,4967.6,10307.7,10307.7,4967.6,10307.7,12574.2,45151.3,3510.1,4967.6,7669.4,12574.2,4967.6,7669.4,10307.7,15142.8,45151.3,10307.7,15142.8,15142.8,7669.4,10307.7,7669.4,6929.8,3510.1,10307.7,4967.6,7669.4,24941.7,12574.2,4967.6,12574.2,40580.1,12574.2,36040.4,4967.6,7669.4,10307.7,6929.8,36040.4,10307.7,24941.7,4967.6,6929.8,18522.1,6929.8,6929.8,10307.7,4967.6,15142.8,12574.2,4967.6,6929.8,18522.1,24941.7,12574.2,10307.7,10307.7,18522.1,36040.4,4967.6,10307.7,12574.2,10307.7,4967.6,36040.4,10307.7,7669.4,24941.7,7669.4,12574.2,4967.6,3510.1,18522.1,4967.6,3510.1,3510.1,24941.7,3510.1,24941.7,45151.3,4967.6,7669.4,7669.4,12574.2,45151.3,12574.2,18522.1,6929.8,3510.1,36040.4,3510.1,4967.6,7669.4,7669.4,18522.1,12574.2,36040.4,10307.7,4967.6,12574.2,7669.4,12574.2,4967.6,4967.6,18522.1,3510.1,24941.7,6929.8,4967.6,7669.4,12574.2,12574.2,12574.2,10307.7,3510.1,4967.6,18522.1,18522.1,10307.7,36040.4,18522.1,18522.1,45151.3,40580.1,3510.1,24941.7,10307.7,10307.7,12574.2,18522.1,4967.6,15142.8,12574.2],"rules":[["비흡연자 · 나이 ≤ 42.5 · 나이 ≤ 22.5",3510.06,142],["비흡연자 · 나이 ≤ 42.5 · 나이 > 22.5 · 나이 ≤ 36.5 · 자녀 ≤ 1.5",4967.61,146],["비흡연자 · 나이 ≤ 42.5 · 나이 > 22.5 · 나이 ≤ 36.5 · 자녀 > 1.5",6929.76,89],["비흡연자 · 나이 ≤ 42.5 · 나이 > 22.5 · 나이 > 36.5",7669.41,97],["비흡연자 · 나이 > 42.5 · 나이 ≤ 58.5 · 나이 ≤ 51.5",10307.74,162],["비흡연자 · 나이 > 42.5 · 나이 ≤ 58.5 · 나이 > 51.5",12574.22,127],["비흡연자 · 나이 > 42.5 · 나이 > 58.5 · 자녀 ≤ 3.5",15142.81,91],["흡연자 · BMI ≤ 30.01 · 나이 ≤ 41",18522.13,55],["흡연자 · BMI ≤ 30.01 · 나이 > 41",24941.68,43],["비흡연자 · 나이 > 42.5 · 나이 > 58.5 · 자녀 > 3.5",30636.18,1],["흡연자 · BMI > 30.01 · 나이 ≤ 41.5 · 나이 ≤ 27.5",36040.35,31],["흡연자 · BMI > 30.01 · 나이 ≤ 41.5 · 나이 > 27.5",40580.07,31],["흡연자 · BMI > 30.01 · 나이 > 41.5",45151.25,54]],"m":{"depth":5.0,"cv_fid_R2":0.974296613247457,"fid_R2":0.9830144056258593,"fid_MAE":1111.6844260188996,"MAE":2672.6198930274973,"MAE_top10":4286.575631736151,"direct_MAE":2756.73023580489,"direct_MAE_top10":4554.888839153825,"under_rate":0.2537313432835821},"root":"흡연 여부"},"14":{"p":[3510.1,6929.8,42929.6,12574.2,6929.8,10307.7,10307.7,4967.6,6929.8,10307.7,15142.8,46678.7,4967.6,3510.1,4967.6,42929.6,12574.2,12574.2,3510.1,3510.1,40580.1,42929.6,10307.7,3510.1,7669.4,3510.1,4967.6,10307.7,42929.6,4967.6,7669.4,3510.1,3510.1,15142.8,4967.6,6929.8,7669.4,10307.7,3510.1,24941.7,7669.4,36040.4,46678.7,12574.2,15142.8,10307.7,24941.7,4967.6,40580.1,3510.1,15142.8,24941.7,12574.2,4967.6,4967.6,36040.4,4967.6,4967.6,3510.1,6929.8,3510.1,10307.7,15142.8,3510.1,10307.7,4967.6,7669.4,24941.7,6929.8,4967.6,18522.1,4967.6,7669.4,12574.2,10307.7,10307.7,15142.8,4967.6,12574.2,3510.1,3510.1,4967.6,3510.1,3510.1,6929.8,12574.2,18522.1,7669.4,6929.8,40580.1,4967.6,7669.4,18522.1,7669.4,4967.6,12574.2,3510.1,36040.4,12574.2,10307.7,40580.1,12574.2,15142.8,12574.2,4967.6,4967.6,12574.2,4967.6,46678.7,24941.7,3510.1,10307.7,10307.7,7669.4,7669.4,3510.1,15142.8,15142.8,4967.6,6929.8,7669.4,12574.2,10307.7,15142.8,7669.4,10307.7,3510.1,18522.1,12574.2,24941.7,18522.1,18522.1,15142.8,4967.6,10307.7,4967.6,10307.7,10307.7,4967.6,10307.7,12574.2,46678.7,3510.1,4967.6,7669.4,12574.2,4967.6,7669.4,10307.7,15142.8,42929.6,10307.7,15142.8,15142.8,7669.4,10307.7,7669.4,6929.8,3510.1,10307.7,4967.6,7669.4,24941.7,12574.2,4967.6,12574.2,40580.1,12574.2,36040.4,4967.6,7669.4,10307.7,6929.8,36040.4,10307.7,24941.7,4967.6,6929.8,18522.1,6929.8,6929.8,10307.7,4967.6,15142.8,12574.2,4967.6,6929.8,18522.1,24941.7,12574.2,10307.7,10307.7,18522.1,36040.4,4967.6,10307.7,12574.2,10307.7,4967.6,36040.4,10307.7,7669.4,24941.7,7669.4,12574.2,4967.6,3510.1,18522.1,4967.6,3510.1,3510.1,24941.7,3510.1,24941.7,46678.7,4967.6,7669.4,7669.4,12574.2,46678.7,12574.2,18522.1,6929.8,3510.1,36040.4,3510.1,4967.6,7669.4,7669.4,18522.1,12574.2,36040.4,10307.7,4967.6,12574.2,7669.4,12574.2,4967.6,4967.6,18522.1,3510.1,24941.7,6929.8,4967.6,7669.4,12574.2,12574.2,12574.2,10307.7,3510.1,4967.6,18522.1,18522.1,10307.7,36040.4,18522.1,18522.1,42929.6,40580.1,3510.1,24941.7,10307.7,10307.7,12574.2,18522.1,4967.6,15142.8,12574.2],"rules":[["비흡연자 · 나이 ≤ 42.5 · 나이 ≤ 22.5",3510.06,142],["비흡연자 · 나이 ≤ 42.5 · 나이 > 22.5 · 나이 ≤ 36.5 · 자녀 ≤ 1.5",4967.61,146],["비흡연자 · 나이 ≤ 42.5 · 나이 > 22.5 · 나이 ≤ 36.5 · 자녀 > 1.5",6929.76,89],["비흡연자 · 나이 ≤ 42.5 · 나이 > 22.5 · 나이 > 36.5",7669.41,97],["비흡연자 · 나이 > 42.5 · 나이 ≤ 58.5 · 나이 ≤ 51.5",10307.74,162],["비흡연자 · 나이 > 42.5 · 나이 ≤ 58.5 · 나이 > 51.5",12574.22,127],["비흡연자 · 나이 > 42.5 · 나이 > 58.5 · 자녀 ≤ 3.5",15142.81,91],["흡연자 · BMI ≤ 30.01 · 나이 ≤ 41",18522.13,55],["흡연자 · BMI ≤ 30.01 · 나이 > 41",24941.68,43],["비흡연자 · 나이 > 42.5 · 나이 > 58.5 · 자녀 > 3.5",30636.18,1],["흡연자 · BMI > 30.01 · 나이 ≤ 41.5 · 나이 ≤ 27.5",36040.35,31],["흡연자 · BMI > 30.01 · 나이 ≤ 41.5 · 나이 > 27.5",40580.07,31],["흡연자 · BMI > 30.01 · 나이 > 41.5 · 나이 ≤ 50.5",42929.56,22],["흡연자 · BMI > 30.01 · 나이 > 41.5 · 나이 > 50.5",46678.67,32]],"m":{"depth":5.0,"cv_fid_R2":0.9746922998779866,"fid_R2":0.9828523687631177,"fid_MAE":1104.9025045238855,"MAE":2646.2051120816222,"MAE_top10":4024.384472717836,"direct_MAE":2709.9264580285894,"direct_MAE_top10":4554.888839153825,"under_rate":0.2574626865671642},"root":"흡연 여부"},"15":{"p":[6151.4,6929.8,42929.6,12574.2,6929.8,10307.7,10307.7,4967.6,6929.8,10307.7,15142.8,46678.7,4967.6,3102.1,4967.6,42929.6,12574.2,12574.2,3102.1,3102.1,40580.1,42929.6,10307.7,3102.1,7669.4,6151.4,4967.6,10307.7,42929.6,4967.6,7669.4,3102.1,3102.1,15142.8,4967.6,6929.8,7669.4,10307.7,3102.1,24941.7,7669.4,36040.4,46678.7,12574.2,15142.8,10307.7,24941.7,4967.6,40580.1,3102.1,15142.8,24941.7,12574.2,4967.6,4967.6,36040.4,4967.6,4967.6,3102.1,6929.8,6151.4,10307.7,15142.8,3102.1,10307.7,4967.6,7669.4,24941.7,6929.8,4967.6,18522.1,4967.6,7669.4,12574.2,10307.7,10307.7,15142.8,4967.6,12574.2,3102.1,3102.1,4967.6,3102.1,6151.4,6929.8,12574.2,18522.1,7669.4,6929.8,40580.1,4967.6,7669.4,18522.1,7669.4,4967.6,12574.2,3102.1,36040.4,12574.2,10307.7,40580.1,12574.2,15142.8,12574.2,4967.6,4967.6,12574.2,4967.6,46678.7,24941.7,3102.1,10307.7,10307.7,7669.4,7669.4,3102.1,15142.8,15142.8,4967.6,6929.8,7669.4,12574.2,10307.7,15142.8,7669.4,10307.7,3102.1,18522.1,12574.2,24941.7,18522.1,18522.1,15142.8,4967.6,10307.7,4967.6,10307.7,10307.7,4967.6,10307.7,12574.2,46678.7,3102.1,4967.6,7669.4,12574.2,4967.6,7669.4,10307.7,15142.8,42929.6,10307.7,15142.8,15142.8,7669.4,10307.7,7669.4,6929.8,3102.1,10307.7,4967.6,7669.4,24941.7,12574.2,4967.6,12574.2,40580.1,12574.2,36040.4,4967.6,7669.4,10307.7,6929.8,36040.4,10307.7,24941.7,4967.6,6929.8,18522.1,6929.8,6929.8,10307.7,4967.6,15142.8,12574.2,4967.6,6929.8,18522.1,24941.7,12574.2,10307.7,10307.7,18522.1,36040.4,4967.6,10307.7,12574.2,10307.7,4967.6,36040.4,10307.7,7669.4,24941.7,7669.4,12574.2,4967.6,6151.4,18522.1,4967.6,3102.1,3102.1,24941.7,3102.1,24941.7,46678.7,4967.6,7669.4,7669.4,12574.2,46678.7,12574.2,18522.1,6929.8,6151.4,36040.4,3102.1,4967.6,7669.4,7669.4,18522.1,12574.2,36040.4,10307.7,4967.6,12574.2,7669.4,12574.2,4967.6,4967.6,18522.1,3102.1,24941.7,6929.8,4967.6,7669.4,12574.2,12574.2,12574.2,10307.7,3102.1,4967.6,18522.1,18522.1,10307.7,36040.4,18522.1,18522.1,42929.6,40580.1,6151.4,24941.7,10307.7,10307.7,12574.2,18522.1,4967.6,15142.8,12574.2],"rules":[["비흡연자 · 나이 ≤ 42.5 · 나이 ≤ 22.5 · 자녀 ≤ 1.5",3102.05,123],["비흡연자 · 나이 ≤ 42.5 · 나이 > 22.5 · 나이 ≤ 36.5 · 자녀 ≤ 1.5",4967.61,146],["비흡연자 · 나이 ≤ 42.5 · 나이 ≤ 22.5 · 자녀 > 1.5",6151.36,19],["비흡연자 · 나이 ≤ 42.5 · 나이 > 22.5 · 나이 ≤ 36.5 · 자녀 > 1.5",6929.76,89],["비흡연자 · 나이 ≤ 42.5 · 나이 > 22.5 · 나이 > 36.5",7669.41,97],["비흡연자 · 나이 > 42.5 · 나이 ≤ 58.5 · 나이 ≤ 51.5",10307.74,162],["비흡연자 · 나이 > 42.5 · 나이 ≤ 58.5 · 나이 > 51.5",12574.22,127],["비흡연자 · 나이 > 42.5 · 나이 > 58.5 · 자녀 ≤ 3.5",15142.81,91],["흡연자 · BMI ≤ 30.01 · 나이 ≤ 41",18522.13,55],["흡연자 · BMI ≤ 30.01 · 나이 > 41",24941.68,43],["비흡연자 · 나이 > 42.5 · 나이 > 58.5 · 자녀 > 3.5",30636.18,1],["흡연자 · BMI > 30.01 · 나이 ≤ 41.5 · 나이 ≤ 27.5",36040.35,31],["흡연자 · BMI > 30.01 · 나이 ≤ 41.5 · 나이 > 27.5",40580.07,31],["흡연자 · BMI > 30.01 · 나이 > 41.5 · 나이 ≤ 50.5",42929.56,22],["흡연자 · BMI > 30.01 · 나이 > 41.5 · 나이 > 50.5",46678.67,32]],"m":{"depth":5.0,"cv_fid_R2":0.9761221693026975,"fid_R2":0.9843133982110556,"fid_MAE":1040.4792623358655,"MAE":2643.313645500811,"MAE_top10":4024.384472717836,"direct_MAE":2713.499481536052,"direct_MAE_top10":4554.888839153825,"under_rate":0.2462686567164179},"root":"흡연 여부"},"16":{"p":[6151.4,6929.8,42929.6,12574.2,6929.8,10307.7,10307.7,4967.6,6929.8,10307.7,15142.8,46322.6,4967.6,3102.1,4967.6,42929.6,12574.2,12574.2,3102.1,3102.1,40580.1,42929.6,10307.7,3102.1,7669.4,6151.4,4967.6,10307.7,42929.6,4967.6,7669.4,3102.1,3102.1,15142.8,4967.6,6929.8,7669.4,10307.7,3102.1,24941.7,7669.4,36040.4,46322.6,12574.2,15142.8,10307.7,24941.7,4967.6,40580.1,3102.1,15142.8,24941.7,12574.2,4967.6,4967.6,36040.4,4967.6,4967.6,3102.1,6929.8,6151.4,10307.7,15142.8,3102.1,10307.7,4967.6,7669.4,24941.7,6929.8,4967.6,18522.1,4967.6,7669.4,12574.2,10307.7,10307.7,15142.8,4967.6,12574.2,3102.1,3102.1,4967.6,3102.1,6151.4,6929.8,12574.2,18522.1,7669.4,6929.8,40580.1,4967.6,7669.4,18522.1,7669.4,4967.6,12574.2,3102.1,36040.4,12574.2,10307.7,40580.1,12574.2,15142.8,12574.2,4967.6,4967.6,12574.2,4967.6,46322.6,24941.7,3102.1,10307.7,10307.7,7669.4,7669.4,3102.1,15142.8,15142.8,4967.6,6929.8,7669.4,12574.2,10307.7,15142.8,7669.4,10307.7,3102.1,18522.1,12574.2,24941.7,18522.1,18522.1,15142.8,4967.6,10307.7,4967.6,10307.7,10307.7,4967.6,10307.7,12574.2,46322.6,3102.1,4967.6,7669.4,12574.2,4967.6,7669.4,10307.7,15142.8,42929.6,10307.7,15142.8,15142.8,7669.4,10307.7,7669.4,6929.8,3102.1,10307.7,4967.6,7669.4,24941.7,12574.2,4967.6,12574.2,40580.1,12574.2,36040.4,4967.6,7669.4,10307.7,6929.8,36040.4,10307.7,24941.7,4967.6,6929.8,18522.1,6929.8,6929.8,10307.7,4967.6,15142.8,12574.2,4967.6,6929.8,18522.1,24941.7,12574.2,10307.7,10307.7,18522.1,36040.4,4967.6,10307.7,12574.2,10307.7,4967.6,36040.4,10307.7,7669.4,24941.7,7669.4,12574.2,4967.6,6151.4,18522.1,4967.6,3102.1,3102.1,24941.7,3102.1,24941.7,46322.6,4967.6,7669.4,7669.4,12574.2,46322.6,12574.2,18522.1,6929.8,6151.4,36040.4,3102.1,4967.6,7669.4,7669.4,18522.1,12574.2,36040.4,10307.7,4967.6,12574.2,7669.4,12574.2,4967.6,4967.6,18522.1,3102.1,24941.7,6929.8,4967.6,7669.4,12574.2,12574.2,12574.2,10307.7,3102.1,4967.6,18522.1,18522.1,10307.7,36040.4,18522.1,18522.1,42929.6,40580.1,6151.4,24941.7,10307.7,10307.7,12574.2,18522.1,4967.6,15142.8,12574.2],"rules":[["비흡연자 · 나이 ≤ 42.5 · 나이 ≤ 22.5 · 자녀 ≤ 1.5",3102.05,123],["비흡연자 · 나이 ≤ 42.5 · 나이 > 22.5 · 나이 ≤ 36.5 · 자녀 ≤ 1.5",4967.61,146],["비흡연자 · 나이 ≤ 42.5 · 나이 ≤ 22.5 · 자녀 > 1.5",6151.36,19],["비흡연자 · 나이 ≤ 42.5 · 나이 > 22.5 · 나이 ≤ 36.5 · 자녀 > 1.5",6929.76,89],["비흡연자 · 나이 ≤ 42.5 · 나이 > 22.5 · 나이 > 36.5",7669.41,97],["비흡연자 · 나이 > 42.5 · 나이 ≤ 58.5 · 나이 ≤ 51.5",10307.74,162],["비흡연자 · 나이 > 42.5 · 나이 ≤ 58.5 · 나이 > 51.5",12574.22,127],["비흡연자 · 나이 > 42.5 · 나이 > 58.5 · 자녀 ≤ 3.5",15142.81,91],["흡연자 · BMI ≤ 30.01 · 나이 ≤ 41",18522.13,55],["흡연자 · BMI ≤ 30.01 · 나이 > 41",24941.68,43],["비흡연자 · 나이 > 42.5 · 나이 > 58.5 · 자녀 > 3.5",30636.18,1],["흡연자 · BMI > 30.01 · 나이 ≤ 41.5 · 나이 ≤ 27.5",36040.35,31],["흡연자 · BMI > 30.01 · 나이 ≤ 41.5 · 나이 > 27.5",40580.07,31],["흡연자 · BMI > 30.01 · 나이 > 41.5 · 나이 ≤ 50.5",42929.56,22],["흡연자 · BMI > 30.01 · 나이 > 41.5 · 나이 > 50.5 · BMI ≤ 45.16",46322.56,31],["흡연자 · BMI > 30.01 · 나이 > 41.5 · 나이 > 50.5 · BMI > 45.16",57717.89,1]],"m":{"depth":5.0,"cv_fid_R2":0.9770228959658548,"fid_R2":0.9842773657732814,"fid_MAE":1040.569135078134,"MAE":2645.9711383876906,"MAE_top10":4050.762550261677,"direct_MAE":2637.470942172634,"direct_MAE_top10":4554.888839153825,"under_rate":0.2462686567164179},"root":"흡연 여부"}},"g":[6487.3,7602.2,44313.5,11929.8,6985.9,10666.9,11704.6,5325.2,7156.8,11726.4,14264.2,47984.0,5545.9,2412.2,4269.1,44589.7,12278.5,12281.3,8440.4,2634.4,41148.1,46046.4,11713.0,2157.4,9066.3,6845.8,3416.4,10294.8,41890.3,4680.9,6995.5,3273.2,3674.9,15281.9,4562.3,7535.2,9008.9,10192.7,3674.9,22566.8,8062.0,34566.3,43988.9,11443.6,15468.7,9758.8,27831.0,8155.6,40640.6,2780.7,17111.4,29319.6,11372.5,5211.3,4922.6,39446.3,5520.2,4232.9,2009.0,7357.3,5214.3,9676.1,14250.3,2318.0,10256.2,4622.4,7355.3,24252.0,5836.9,3924.2,18485.9,6255.6,6697.7,12753.5,11189.7,7760.8,16190.8,4104.5,13928.2,3674.9,7116.1,4956.2,4260.0,5747.7,7236.5,13297.7,19838.2,7531.1,7967.0,38939.1,3542.8,7308.6,20176.7,7445.5,7710.1,13686.7,2323.6,37794.2,11114.7,9963.8,40162.2,13800.7,15279.7,12290.6,6554.1,4540.7,11811.0,3922.1,45699.1,27733.9,2192.0,11697.2,10542.3,6920.2,6436.4,2986.2,15116.5,14178.4,3495.5,7138.9,8561.5,13772.5,8452.6,14035.7,7203.0,9130.8,2791.6,20774.1,13933.1,21699.4,18179.4,19763.7,14421.5,5649.0,9032.4,5336.9,9951.6,11636.6,4103.7,11878.5,12011.3,48700.4,3135.3,4479.1,7295.9,11454.0,4520.2,6545.9,11637.3,13649.0,50486.3,11151.7,15676.8,17665.7,7865.3,11625.1,8708.3,6726.2,2737.2,9418.6,4192.7,7480.1,22245.6,13061.5,4145.0,14205.6,43575.6,11814.3,34374.8,5111.8,9075.3,12403.0,6881.5,38333.4,11737.3,22387.1,5166.9,6806.1,17761.0,6193.4,7642.1,9443.4,3447.9,13616.6,13049.3,5179.2,7511.6,17416.6,28651.4,13972.6,9892.6,10261.6,19374.2,35266.2,5745.4,9594.1,12104.2,10191.6,4817.3,36345.0,9258.8,5935.1,27585.0,6285.2,12424.8,4069.8,6619.8,17255.0,4236.9,4074.8,5652.4,27099.9,2780.7,24504.3,47998.4,5924.8,9068.6,7275.2,12517.7,46334.6,11424.7,18010.2,8756.0,5248.6,34639.9,2745.8,5950.6,5627.5,8734.9,17118.6,11508.0,36416.1,12221.4,4243.6,12038.1,7466.5,13739.6,4279.2,3447.9,21968.0,2580.3,24541.6,8454.7,4871.0,7671.3,13508.8,12458.7,11978.7,9983.3,2924.1,6430.8,19147.8,18538.2,12095.4,38300.8,16805.4,14673.8,41728.7,41984.2,7371.4,25479.8,10951.4,10808.5,12020.9,19692.4,4672.5,15766.9,10621.4],"Lf":6};
+
+
+let L=D.Lf;
+function draw(){const p=D.per[L].p,g=D.g;
+ plot(document.getElementById('fid-cv'),{h:280,x:[0,60000],y:[0,60000],xt:[0,20000,40000,60000],yt:[0,20000,40000,60000],xf:kfmt,yf:kfmt,xl:'선생님(GBM) 예측',yl:'학생 나무 예측',draw:(c,X,Y)=>{
+  line(c,[[X(0),Y(0)],[X(60000),Y(60000)]],cssv('--ink'),1,[4,4]);for(let i=0;i<g.length;i++)dot(c,X(g[i]),Y(p[i]),3,cssv('--c-3'),.7)}})}
+function show(){const d=D.per[L],m=d.m;document.getElementById('l-dial-o').textContent=L+'개';
+ setBarV(document.getElementById('b-fid'),Math.max(0,m.fid_R2),1,fmt(m.fid_R2,3));
+ setBarV(document.getElementById('b-mae'),m.MAE/8000,2470/8000,fmtD(m.MAE));
+ setBarV(document.getElementById('b-top'),m.MAE_top10/12000,3612/12000,fmtD(m.MAE_top10));
+ document.getElementById('dial-cap').textContent='잎 '+L+'개 (깊이 '+m.depth+'): 학습 CV 충실도 '+fmt(m.cv_fid_R2,4)+', 시험 충실도 '+fmt(m.fid_R2,4)+', 선생님과 평균 '+fmtD(m.fid_MAE)+' 차이. 같은 크기로 직접 배운 나무 MAE '+fmtD(m.direct_MAE)+'.';
+ document.querySelector('#rules-t tbody').innerHTML=d.rules.map((r,i)=>'<tr><td>'+(i+1)+'</td><td>'+r[0]+'</td><td class="r">'+fmtD(r[1],2)+'</td><td class="r">'+r[2]+'</td></tr>').join('');
+ document.getElementById('rules-h').textContent='규칙표 (잎 '+L+'개, 금액 순)';
+ robo('robo-5','thinking');setTimeout(()=>robo('robo-5',m.cv_fid_R2<0.9?'wrong':L>12?'confused':m.cv_fid_R2>=0.95?'success':'idle'),300);draw()}
+document.getElementById('l-dial').addEventListener('input',e=>{L=+e.target.value;show()});
+show();onTheme(draw);
+</script>
+</body>
+</html>

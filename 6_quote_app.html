@@ -1,0 +1,733 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<script>
+(function(){var KEY='it3_lang',AVAILABLE=['ko'],LANGS=['ko','en','zh','ja','uz','ru'];
+var cur=document.documentElement.lang||'ko';cur=cur.slice(0,2);
+function root(){var p=location.pathname;var dir=p.replace(/[^\/]*$/,'');if(cur!=='ko'){dir=dir.replace(/[^\/]+\/$/,'')}return dir}
+function file(){var f=location.pathname.split('/').pop();if(!f)f='index.html';if(!/\.html?$/.test(f))f+='.html';return f}
+function url(l){return root()+(l==='ko'?'':l+'/')+file()+location.search.replace(/[?&]lang=[^&]*/,'').replace(/^&/,'?')+location.hash}
+function exists(u,cb){if(location.protocol==='file:'){cb(true);return}try{fetch(u,{method:'HEAD'}).then(function(r){cb(!(r.status===404||r.status===410))},function(){cb(true)})}catch(e){cb(true)}}
+function save(l){try{localStorage.setItem(KEY,l)}catch(e){}}
+function drop(){try{localStorage.removeItem(KEY)}catch(e){}}
+window.itSetLang=function(l,manual){if(l===cur)return;
+ if(AVAILABLE.indexOf(l)<0){if(manual){var n=document.getElementById('lang-note');if(n){n.hidden=false;n.textContent='이 언어판은 아직 준비 중입니다 ('+l+'). 한국어판을 보여 드립니다.'}}else{drop()}return}
+ var u=url(l);exists(u,function(ok){if(ok){if(manual)save(l);location.href=u}else{drop();if(manual){var n=document.getElementById('lang-note');if(n){n.hidden=false;n.textContent='언어판 파일을 찾지 못했습니다: '+u}}}})};
+var q=(location.search.match(/[?&]lang=([a-z]{2})/)||[])[1];
+if(q&&LANGS.indexOf(q)>=0){save(q);if(q!==cur)itSetLang(q,true);return}
+var s=null;try{s=localStorage.getItem(KEY)}catch(e){}
+if(s&&s!==cur){itSetLang(s,false);return}
+if(!s){var b=(navigator.language||'ko').slice(0,2);if(b!==cur&&AVAILABLE.indexOf(b)>=0)itSetLang(b,false)}
+})();
+</script>
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>6편 · 기준서가 곧 견적: 의료비 견적 앱 | 인슈어테크 #3</title>
+<meta name="description" content="AI(인공지능) x 비즈니스 #1 인슈어테크_03_회귀모델 6편. 규칙표(대리모델)를 HTML 한 장 견적 앱으로 만들고, 시험 268명에서 노트북과 불일치 0 을 확인한다.">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=Silkscreen&display=swap">
+<style>
+.say .av:has(img){background:#fff}
+.say .av img{display:block}
+img.scene{display:block;width:100%;max-width:720px;height:auto;aspect-ratio:9/5;object-fit:cover;border-radius:var(--r)}
+img.keyvis{display:block;width:100%;height:auto;aspect-ratio:1100/320;object-fit:cover;border-radius:var(--r)}
+img.pic{display:block;width:100%;height:auto;aspect-ratio:480/440;object-fit:cover;border-radius:6px}
+.crew .cf{background:#fff}
+.crew .cf img{width:100%;height:100%;object-fit:contain}
+.crew .moods button img{width:36px;height:36px;border-radius:7px;display:block}
+/* 레이아웃: 보상 센터 연구 노트 — 상단 바 · 히어로(그림 자리) · 육각 번호 섹션 · 카드형 실습 */
+:root{
+  --bg:#f6f5fb; --surface:#ffffff; --sunken:#eeecf7; --ink:#1d1a2e; --muted:#5d5873; --line:#dcd8ea;
+  --accent:#5b47c9; --accent-ink:#ffffff; --accent-soft:#ece8ff;
+  --core:#6a4fd8; --data:#c2417a; --seq:#13857f;
+  --c-no:#2f86c9; --c-claim:#d9730d; --c-3:#7b61d9; --c-4:#1f9e78;
+  --risk:#b4471b; --risk-bg:#fdeee6; --safe:#1f7a5c; --safe-bg:#e5f4ee; --warn:#9a620e; --warn-bg:#fbf1df;
+  --grid:#e6e3f0;
+  --f-body:"IBM Plex Sans KR","Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,"SFMono-Regular",Menlo,Consolas,monospace;
+  --f-pixel:"Silkscreen","IBM Plex Mono",monospace;
+  --r:8px;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#12111a; --surface:#1b1a26; --sunken:#0e0d15; --ink:#ece9f7; --muted:#a29dba; --line:#2e2b40;
+  --accent:#a998ff; --accent-ink:#14121f; --accent-soft:#2a2547;
+  --core:#a48cf0; --data:#f07aaa; --seq:#4cc3b9;
+  --c-no:#3f8fd2; --c-claim:#d8742a; --c-3:#8a74e0; --c-4:#26a17c;
+  --risk:#f08a5d; --risk-bg:#3a1f16; --safe:#5fcf9f; --safe-bg:#14302a; --warn:#e3aa52; --warn-bg:#33270f;
+  --grid:#2a2738; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --grid:#2a2738; color-scheme:dark}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html{scroll-behavior:smooth}
+@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:16px;line-height:1.7;word-break:keep-all;overflow-wrap:break-word}
+a{color:var(--accent)}
+h1,h2,h3{line-height:1.3;text-wrap:balance;margin:0}
+p{margin:0}
+code,pre,.mono{font-family:var(--f-mono)}
+.num{font-variant-numeric:tabular-nums}
+.wrap{max-width:1000px;margin:0 auto;padding-inline:20px}
+nav.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:20;background:color-mix(in srgb,var(--bg) 92%,transparent);backdrop-filter:blur(6px);border-bottom:1px solid var(--line)}
+nav.top .wrap{display:flex;align-items:center;gap:6px 14px;flex-wrap:wrap;padding-block:8px}
+nav.top .brand{font-weight:700;text-decoration:none;color:var(--ink);white-space:nowrap}
+nav.top .brand b{font-family:var(--f-pixel);font-weight:400;color:var(--accent);margin-left:4px}
+nav.top .links{display:flex;gap:2px 12px;flex-wrap:wrap;font-size:.86rem;flex:1;min-width:0}
+nav.top .links a{color:var(--muted);text-decoration:none}
+nav.top .links a:hover{color:var(--ink)}
+nav.top select{width:auto;font:inherit;font-size:.82rem;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:3px 6px}
+header.hero{padding-block:28px 20px}
+.hero-grid{display:grid;gap:18px}
+.series{display:flex;flex-wrap:wrap;gap:6px}
+.series a{font-size:.78rem;text-decoration:none;color:var(--muted);border:1px solid var(--line);border-radius:999px;padding:2px 10px;background:var(--surface)}
+.series a.on{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:600}
+.kicker{font-family:var(--f-pixel);font-size:.82rem;color:var(--accent);letter-spacing:.04em}
+h1{font-size:clamp(1.7rem,4.2vw,2.5rem);font-weight:700;letter-spacing:-.015em}
+.lead{font-size:1.06rem;color:var(--muted);max-width:68ch}
+.byline{font-size:.84rem;color:var(--muted)}
+.guide{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:.82rem;color:var(--muted)}
+.guide span::before{content:"";display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px;vertical-align:-1px;background:var(--c)}
+.chat{display:grid;gap:10px;max-width:760px}
+.say{display:flex;gap:12px;align-items:flex-start}
+.say .av{flex:0 0 52px;height:52px;border-radius:12px;display:grid;place-items:center;font-weight:700;font-size:1.05rem;color:var(--accent-ink);background:var(--avc,var(--accent));position:relative;overflow:hidden}
+.say .av img{width:100%;height:100%;object-fit:cover;object-position:50% 18%}
+.say .av small{position:absolute;bottom:2px;left:0;right:0;font-size:.55rem;font-weight:500;text-align:center;opacity:.85}
+.say .sbub{background:var(--surface);border:1px solid var(--line);border-radius:4px 14px 14px 14px;padding:8px 14px;min-width:0}
+.say .sbub b{font-size:.8rem;color:var(--muted);display:block}
+.say .sbub ul{margin:4px 0 0;padding-left:1.2em}
+.npc{display:inline-block;margin-left:6px;font-family:var(--f-pixel);font-size:.62rem;font-weight:400;letter-spacing:.06em;color:#3a2a00;background:#f2c94c;border:1px solid #b8901a;border-radius:3px;padding:0 5px;vertical-align:1px}
+.bomi{--avc:#d9730d}.actuary{--avc:#5b47c9}.fly{--avc:#13857f}.robo{--avc:#2f86c9}
+section.part{padding-block:34px 10px;border-top:1px solid var(--line);margin-top:26px}
+.part-head{display:grid;grid-template-columns:auto 1fr;gap:6px 14px;align-items:center;margin-bottom:16px}
+.hex{width:44px;height:50px;clip-path:polygon(50% 0,100% 25%,100% 75%,50% 100%,0 75%,0 25%);background:var(--kc,var(--accent));color:#fff;display:grid;place-items:center;font-family:var(--f-pixel);font-size:1.05rem;grid-row:span 2}
+.part-head h2{font-size:1.4rem}
+.part-head h2 span.en{font-family:var(--f-pixel);font-weight:400;font-size:.72rem;color:var(--muted);margin-left:8px;letter-spacing:.03em}
+.part-head p{color:var(--muted);font-size:.94rem}
+.body{display:grid;gap:16px;grid-template-columns:minmax(0,1fr)}
+.body>p,.body>ul,.body>ol{max-width:72ch}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:16px 18px;display:grid;gap:12px;min-width:0}
+.card h3{font-size:1.02rem}
+.cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,280px),1fr));gap:14px}
+.tblwrap{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:.88rem}
+th,td{padding:6px 10px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+th{font-size:.76rem;color:var(--muted);font-weight:600;letter-spacing:.02em;white-space:nowrap}
+td.r,th.r{text-align:right;font-variant-numeric:tabular-nums}
+tr.hl td{background:var(--accent-soft);font-weight:600}
+.btns{display:flex;flex-wrap:wrap;gap:8px}
+button{font:inherit}
+.btn{text-decoration:none;display:inline-block;font-size:.9rem;font-weight:600;border-radius:8px;padding:7px 14px;cursor:pointer;border:1px solid var(--line);background:var(--surface);color:var(--ink)}
+.btn:hover{border-color:var(--accent)}
+.btn[aria-pressed="true"],.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.btn.small{font-size:.8rem;padding:3px 10px}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.dial{display:grid;gap:4px;min-width:0;align-content:start}
+.dial label{font-size:.86rem;font-weight:500;display:flex;justify-content:space-between;gap:8px}
+.dial label output{font-family:var(--f-mono);color:var(--accent)}
+input[type=range]{width:100%;accent-color:var(--accent)}
+select,input[type=text],input[type=number]{font:inherit;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:6px 8px;width:100%;min-width:0}
+.canvas-box{position:relative;min-width:0}
+.canvas-box canvas{width:100%;display:block;border:1px solid var(--line);border-radius:6px;background:var(--surface)}
+.cap{font-size:.86rem;color:var(--muted)}
+.cap b{color:var(--ink)}
+.legend{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:.8rem;color:var(--muted)}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:5px;vertical-align:-1px;background:var(--c)}
+.tip{position:absolute;pointer-events:none;background:var(--ink);color:var(--bg);font-size:.76rem;padding:4px 8px;border-radius:6px;white-space:nowrap;transform:translate(-50%,-120%);z-index:5}
+.stat{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,130px),1fr));gap:8px}
+.stat>div{background:var(--sunken);border-radius:6px;padding:8px 12px;display:grid}
+.stat .l{font-size:.74rem;color:var(--muted)}
+.stat .v{font-size:1.25rem;font-weight:600;font-variant-numeric:tabular-nums}
+.bars{display:grid;gap:8px}
+.bar{display:grid;grid-template-columns:6.5em 1fr 4.2em;gap:8px;align-items:center;font-size:.84rem}
+.bar .track{position:relative;height:16px;background:var(--sunken);border-radius:4px}
+.bar .fill{position:absolute;left:0;top:0;bottom:0;border-radius:0 4px 4px 0;background:var(--c,var(--accent));transition:width .25s}
+.bar .base{position:absolute;top:-4px;bottom:-4px;width:2px;background:var(--ink)}
+.bar .v{font-family:var(--f-mono);text-align:right}
+@media (prefers-reduced-motion:reduce){.bar .fill{transition:none}}
+.cm{display:grid;grid-template-columns:auto 1fr 1fr;gap:6px;max-width:440px;font-variant-numeric:tabular-nums}
+.cm .h{font-size:.76rem;color:var(--muted);font-weight:600;display:flex;align-items:end;padding:2px 4px}
+.cm .rh{align-items:center}
+.cm .c{border:1px solid var(--line);border-radius:6px;padding:8px 10px;display:grid;background:var(--surface)}
+.cm .c b{font-size:1.15rem}
+.cm .c span{font-size:.74rem;color:var(--muted)}
+.cm .c.ok{background:var(--safe-bg);border-color:transparent}
+.cm .c.bad{background:var(--risk-bg);border:2px solid var(--risk)}
+.cm .c.bad span{color:var(--risk);font-weight:600}
+.pill{display:inline-block;font-size:.74rem;font-weight:600;padding:1px 8px;border-radius:999px;white-space:nowrap}
+.pill.risk{background:var(--risk-bg);color:var(--risk)}.pill.safe{background:var(--safe-bg);color:var(--safe)}.pill.warn{background:var(--warn-bg);color:var(--warn)}
+.pill.pass{background:var(--safe-bg);color:var(--safe)}.pill.fail{background:var(--risk-bg);color:var(--risk)}
+.note{border-left:3px solid var(--warn);background:var(--warn-bg);padding:8px 14px;border-radius:0 6px 6px 0;font-size:.9rem}
+.note.info{border-color:var(--accent);background:var(--accent-soft)}
+.q{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:14px 18px;display:grid;gap:10px}
+.q .qt{font-weight:600}
+.q .opts{display:grid;gap:6px}
+.q .opts button{text-align:left;font-size:.92rem;border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:8px;padding:8px 12px;cursor:pointer}
+.q .opts button.right{border-color:var(--safe);background:var(--safe-bg)}
+.q .opts button.wrong{border-color:var(--risk);background:var(--risk-bg)}
+.q .fb{font-size:.9rem}
+.codebox{border:1px solid var(--line);border-radius:var(--r);overflow:hidden;background:var(--surface)}
+.codebox .tabs{display:flex;flex-wrap:wrap;gap:2px;border-bottom:1px solid var(--line);background:var(--sunken);padding:6px 6px 0}
+.codebox .tabs button{border:0;background:none;padding:6px 12px;border-radius:6px 6px 0 0;cursor:pointer;color:var(--muted);font-size:.84rem;font-family:var(--f-mono)}
+.codebox .tabs button[aria-selected="true"]{background:var(--surface);color:var(--ink);font-weight:500}
+.codebox .tools{display:flex;flex-wrap:wrap;gap:6px;padding:8px 10px;border-bottom:1px solid var(--line);align-items:center}
+.codebox .tools span{font-size:.78rem;color:var(--muted);flex:1;min-width:12em}
+.codebox pre{margin:0;padding:14px 16px;overflow:auto;max-height:440px;font-size:.8rem;line-height:1.55;white-space:pre}
+details.run{border:1px solid var(--line);border-radius:var(--r);background:var(--sunken)}
+details.run summary{cursor:pointer;padding:8px 14px;font-size:.88rem;font-weight:500}
+details.run pre{margin:0;padding:10px 16px 14px;overflow:auto;font-size:.78rem;line-height:1.5}
+.gloss{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr));gap:10px}
+.gloss div{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:10px 14px}
+.gloss dt{font-weight:600}.gloss dd{margin:2px 0 0;font-size:.88rem;color:var(--muted)}
+.gloss dd i{font-style:normal;color:var(--ink)}
+.prompt pre{white-space:pre-wrap;overflow-wrap:anywhere;background:var(--sunken);border:1px solid var(--line);border-radius:var(--r);padding:14px 16px;font-size:.8rem;max-height:360px;overflow:auto;margin:0}
+.teach-link{display:inline-block;font-weight:600;text-decoration:none;border:1px solid var(--accent);border-radius:8px;padding:8px 14px}
+section.outro{margin-top:40px;padding-block:30px;border-top:1px solid var(--line)}
+.outro .scene{width:100%;max-width:720px;aspect-ratio:720/400;border-radius:var(--r)}
+.placeholder{display:grid;place-items:center;text-align:center;background:repeating-linear-gradient(135deg,var(--sunken) 0 12px,var(--surface) 12px 24px);border:1px dashed var(--line);color:var(--muted);font-size:.82rem;padding:10px}
+.nav-eps{display:flex;flex-wrap:wrap;gap:8px;justify-content:space-between}
+footer{border-top:1px solid var(--line);margin-top:30px;padding-block:22px 40px;font-size:.82rem;color:var(--muted)}
+footer .wrap{display:grid;gap:8px}
+.robo-w{align-items:center}
+.robo-w .av{flex-basis:64px;height:64px;font-size:1.4rem}
+.robo-w[data-st="wrong"] .av{--avc:var(--risk)}
+.robo-w[data-st="success"] .av{--avc:var(--safe)}
+.robo-w[data-st="confused"] .av{--avc:var(--warn)}
+.player{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.player input[type=range]{flex:1;min-width:140px}
+.stamp{justify-self:start;border:3px double currentColor;border-radius:4px;padding:6px 16px;font-weight:700;font-size:1.35rem;letter-spacing:.04em;transform:rotate(-2deg)}
+.stamp.risk{color:var(--risk)}.stamp.safe{color:var(--safe)}.stamp.reject{color:var(--warn)}
+@media (max-width:560px){body{font-size:15px}.part-head h2{font-size:1.2rem}.say .av{flex-basis:44px;height:44px}}
+.tagx{display:inline-block;font-size:.72rem;font-weight:600;background:var(--sunken);border-radius:4px;padding:0 6px;margin-right:4px;color:var(--muted)}
+.crewgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,210px),1fr));gap:14px}
+.crew{align-content:start}
+.crew .faces{position:relative;aspect-ratio:4/3;width:100%;overflow:hidden;border-radius:var(--r)}
+.crew .cf{position:absolute;inset:0;display:none;border-radius:var(--r);flex-direction:column;gap:4px}
+.crew .cf.on{display:grid;align-content:center}
+.crew .moods{display:flex;flex-wrap:wrap;gap:6px}
+.crew .moods button{width:44px;height:44px;border-radius:10px;border:2px solid var(--line);background:var(--sunken);cursor:pointer;display:grid;place-items:center;padding:0;line-height:1.1;color:var(--avc)}
+.crew .moods button small{font-size:.58rem;color:var(--muted)}
+.crew .moods button[aria-pressed="true"]{border-color:var(--avc)}
+.cline{font-weight:500}
+.keyvis{width:100%;aspect-ratio:1100/320;border-radius:var(--r)}
+.stops{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,290px),1fr));gap:14px}
+.stop{border-top:4px solid var(--kc)}
+.stop .pic{aspect-ratio:480/440;border-radius:6px}
+.stop .no{font-family:var(--f-pixel);color:var(--kc)}
+.bigq{font-size:1.15rem;font-weight:600;border-left:4px solid var(--accent);padding:6px 14px;background:var(--accent-soft);border-radius:0 8px 8px 0;max-width:72ch}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:16px 18px;display:grid;gap:12px;min-width:0;align-content:start}
+.task{border:1px solid var(--line);border-left:4px solid var(--data);background:var(--surface);border-radius:0 var(--r) var(--r) 0;padding:14px 18px;display:grid;gap:8px}
+.task .tt{font-family:var(--f-pixel);font-size:.8rem;color:var(--data)}
+.task ul{margin:0;padding-left:1.2em}
+.answer{border:2px dashed var(--accent);border-radius:var(--r);padding:14px 18px;display:grid;gap:10px;background:var(--surface)}
+.answer .tt{font-weight:700;color:var(--accent)}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chips span{font-size:.76rem;border:1px solid var(--line);border-radius:999px;padding:1px 9px;background:var(--sunken)}
+.chips span.ban{border-color:var(--risk);color:var(--risk);background:var(--risk-bg)}
+
+:root{--c-under:var(--c-claim);--c-over:var(--c-no)}
+.say .sbub p b,.say .sbub li b,.say .sbub p strong{display:inline;font-size:inherit;color:inherit}
+.review{text-decoration:none;color:inherit;border-left:4px solid var(--seq)}
+.review:hover{border-color:var(--accent)}
+.scene.placeholder{width:100%;max-width:720px;aspect-ratio:9/5;border-radius:var(--r)}
+.keyvis.placeholder{width:100%;aspect-ratio:1100/320;border-radius:var(--r)}
+.pic.placeholder{width:100%;aspect-ratio:720/660;border-radius:6px}
+.otherpart{font-size:.78rem;text-decoration:none;border:1px dashed var(--seq);color:var(--seq);border-radius:999px;padding:2px 10px;background:var(--surface)}
+.box{border:1px solid var(--seq);background:var(--surface);border-radius:var(--r);padding:14px 18px;display:grid;gap:8px}
+.box .tt{font-family:var(--f-pixel);font-size:.78rem;color:var(--seq)}
+.form{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,150px),1fr));gap:10px}
+.form label{display:grid;gap:3px;font-size:.84rem;font-weight:500}
+.path{display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:.86rem}
+.path span{border:1px solid var(--line);border-radius:6px;padding:2px 8px;background:var(--sunken)}
+.path span.leaf{background:var(--accent-soft);border-color:var(--accent);font-weight:600}
+.drop{border:2px dashed var(--line);border-radius:var(--r);padding:18px;text-align:center;color:var(--muted);font-size:.9rem}
+.drop.on{border-color:var(--accent);background:var(--accent-soft)}
+.big{font-size:1.6rem;font-weight:700;font-variant-numeric:tabular-nums}
+.mono{overflow-wrap:anywhere}
+@media (max-width:640px){nav.top .links{order:3;flex-basis:100%}}
+td.r.under{color:var(--c-under);font-weight:600}td.r.over{color:var(--c-over)}
+
+</style>
+</head>
+<body>
+<nav class="top"><div class="wrap"><a class="brand" href="index.html">인슈어테크 #3<b>· 6</b></a><div class="links"><a href="#deploy">배포 방식</a><a href="#app">견적 앱</a><a href="#batch">CSV 일괄</a><a href="#verify">일괄 검증</a><a href="#fair">공정성</a><a href="#check">확인 문제</a><a href="#practice">실무로 잇기</a><a href="#prompt">프롬프트</a><a href="#glossary">용어</a><a href="answers.html#a6">교육자용 정답</a></div><a class="otherpart" href="https://adminmrobo.github.io/ai-biz-insurtech-04/">2부 실전편 →</a><select id="lang-sel" aria-label="언어 선택" onchange="itSetLang(this.value,true)"><option value="ko" selected>한국어</option><option value="en">English</option><option value="zh">中文</option><option value="ja">日本語</option><option value="uz">O'zbekcha</option><option value="ru">Русский</option></select></div></nav><header class="hero"><div class="wrap hero-grid"><div class="series" aria-label="시리즈 편 목록"><a href="1_charges_question.html" class="">1 평균의 함정</a><a href="2_data_cleaning.html" class="">2 꼬리 지키기</a><a href="3_five_models.html" class="">3 모델 다섯</a><a href="4_margin_lab.html" class="">4 여유분 실험실</a><a href="5_surrogate_tree.html" class="">5 대리모델</a><a href="6_quote_app.html" class="on" aria-current="page">6 견적 앱</a><a class="otherpart" href="https://adminmrobo.github.io/ai-biz-insurtech-04/">↔ 2부 실전편 (인슈어테크 #4 실전)</a></div><p class="kicker">EPISODE 6 · 정리형 · Quote app</p>
+<h1>기준서가 곧 견적: 의료비 견적 앱</h1><p class="lead">상담 창구에는 계산기 · 파이썬이 없습니다. 5편의 규칙표(잎 6개)를 그대로 따라가는 <b>HTML 한 장짜리 견적 앱</b>을 만들고, 시험 268명 전원에서 노트북과 <b>불일치 0명</b>인지 확인합니다. 성별 · 지역이 견적을 움직이는지도 숫자로 셉니다.</p><div class="chat"><div class="say bomi"><div class="av" data-face="curious" aria-hidden="true"><img src="assets/av_bomi_curious.webp" alt="" width="160" height="160" loading="lazy"></div><div class="sbub"><b>조교</b><p>규칙표 여섯 줄이면 상담 창구에서 바로 견적 낼 수 있겠어요. 그런데 종이로 하면 계산 실수하지 않을까요?</p></div></div><div class="say actuary"><div class="av" data-face="explain" aria-hidden="true"><img src="assets/av_actuary_explain.webp" alt="" width="160" height="160" loading="lazy"></div><div class="sbub"><b>박사<span class="npc" title="NPC">NPC</span></b><p>(손바닥을 든다) …그래서 종이와 <b>똑같이</b> 계산하는 앱을 만듭니다. 서버도, 파이썬도 없이 이 페이지 하나로요. 그리고 노트북과 한 명도 다르지 않은지 확인합니다.</p></div></div><div class="say robo"><div class="av" data-face="thinking" aria-hidden="true"><img src="assets/av_robo_thinking.webp" alt="" width="160" height="160" loading="lazy"></div><div class="sbub"><b>머니로보</b><p>삐빅. 견적 담당 머니로보 출근. 돈은 안 받습니다.</p></div></div></div><p class="byline">글 · 안상선 ((주)M-Robo 대표) · AI(인공지능) x 비즈니스 #1 인슈어테크_03_회귀모델</p><div class="guide"><span style="--c:var(--c-3)">규칙 경로 · 적립 권장액</span><span style="--c:var(--c-under)">크게 적게 잡음</span><span style="--c:var(--c-over)">과대 추정</span><span style="--c:var(--safe)">노트북 일치</span></div></div></header><main><section class="part" id="deploy"><div class="wrap"><div class="part-head" style="--kc:var(--data)"><div class="hex">1</div><h2>배포 방식 네 가지<span class="en">Four ways to ship</span></h2><p>현장 제약: 상담 창구에는 계산기 · 파이썬이 없다.</p></div><div class="body"><div class="tblwrap"><table><thead><tr><th>방식</th><th>원 모델과 같은 견적?</th><th>필요한 것</th><th>인터넷</th><th>모델을 바꿀 때</th><th>이 시리즈</th></tr></thead><tbody><tr><td>서버 API (원 모델 GBM)</td><td>같다</td><td>서버 · 파이썬 · 관리 인력</td><td>필요</td><td>서버 모델만 교체</td><td>—</td></tr><tr><td>원 모델을 JS 로 이식</td><td>같다 (나무 200그루를 그대로)</td><td>HTML + 큰 JSON · 전처리 규칙</td><td>불필요</td><td>다시 내보내기</td><td>2부 4편</td></tr><tr class="hl"><td>규칙표(대리모델) 앱</td><td>충실도 R² 0.961 (금액이 다른 고객 있음)</td><td>HTML 한 장 + 규칙 JSON</td><td>불필요</td><td>JSON 한 파일 교체</td><td><b>이 편</b></td></tr><tr><td>종이 기준서</td><td>규칙표와 같다 (손으로)</td><td>종이 · 사람</td><td>불필요</td><td>다시 인쇄 · 교육</td><td>5편 규칙표</td></tr></tbody></table></div><p>이 편은 <b>규칙표 앱</b>을 고릅니다. 원 모델과 금액이 다른 고객이 있다는 것을 받아들이는 대신, 종이 기준서와 앱이 <b>같은 규칙</b>을 쓰므로 사람이 손으로 확인할 수 있고, 인터넷이 끊겨도 이 HTML 한 파일로 견적이 나옵니다.</p><p class="note">견적 앱은 대리모델(규칙표)을 그대로 실행합니다. 원 모델과 금액이 다른 고객이 있다는 것을 받아들인 선택입니다.</p></div></div></section><section class="part" id="app"><div class="wrap"><div class="part-head" style="--kc:var(--seq)"><div class="hex">2</div><h2>견적 앱<span class="en">Quote app</span></h2><p>고객 정보를 넣으면 규칙을 따라 내려가 견적을 냅니다.</p></div><div class="body"><div class="form"><label for="in-age">나이<input type="number" id="in-age" min="18" max="64" value="45"></label><label for="in-sex">성별<select id="in-sex"><option value="female">female</option><option value="male">male</option></select></label><label for="in-bmi">BMI<input type="number" id="in-bmi" min="15" max="55" step="0.01" value="31"></label><label for="in-ch">자녀 수<input type="number" id="in-ch" min="0" max="5" value="1"></label><label for="in-smk">흡연<select id="in-smk"><option value="yes">yes</option><option value="no">no</option></select></label><label for="in-reg">지역<select id="in-reg"><option>northeast</option><option>northwest</option><option selected>southeast</option><option>southwest</option></select></label></div><div class="card"><h3>규칙 경로</h3><div class="path" id="q-path" aria-live="polite"></div><div class="cols"><div><span class="cap">견적 (규칙표 금액)</span><p class="big" id="q-quote"></p></div><div><span class="cap">적립 권장액 = 견적 × (1 + +0.06)</span><p class="big" id="q-res" style="color:var(--c-3)"></p></div></div><p class="cap" id="q-cap" aria-live="polite"></p></div><p class="note info">여유분 +0.06 는 4편과 같은 방법(과소 : 과대 = 3 : 1)으로 고르되, <b>배포하는 규칙표 자체</b>의 학습 데이터 5-Fold 견적으로 다시 골랐습니다(fold 마다 GBM → 대리 나무를 통째로 다시 학습). 원 모델(GBM)의 최적 k 는 0 이었지만, 규칙표는 더 거칠어 적게 잡는 사람이 많기 때문입니다.</p><div class="say robo robo-w" id="robo-6" data-st="idle" aria-live="polite"><div class="av" data-rs="idle" aria-hidden="true"><img src="assets/av_robo_idle.webp" alt="" width="160" height="160" loading="lazy"></div><div class="av" data-rs="thinking" hidden aria-hidden="true"><img src="assets/av_robo_thinking.webp" alt="" width="160" height="160" loading="lazy"></div><div class="av" data-rs="wrong" hidden aria-hidden="true"><img src="assets/av_robo_wrong.webp" alt="" width="160" height="160" loading="lazy"></div><div class="av" data-rs="confused" hidden aria-hidden="true"><img src="assets/av_robo_confused.webp" alt="" width="160" height="160" loading="lazy"></div><div class="av" data-rs="success" hidden aria-hidden="true"><img src="assets/av_robo_success.webp" alt="" width="160" height="160" loading="lazy"></div><div class="sbub"><b>머니로보</b><p data-rs="idle">견적 완료. 입력을 바꾸면 바로 다시 계산해요.</p><p data-rs="thinking" hidden>삐빅, 규칙 따라 내려가는 중…</p><p data-rs="wrong" hidden>이 고객은 실제보다 크게 적게 잡혔어요!</p><p data-rs="confused" hidden>입력이 비었어요. 규칙이 빠지면 견적도 없어요.</p><p data-rs="success" hidden>삐빅! 노트북과 한 명도 다르지 않아요.</p></div></div></div></div></section><section class="part" id="batch"><div class="wrap"><div class="part-head" style="--kc:var(--seq)"><div class="hex">3</div><h2>CSV 일괄 견적<span class="en">Batch quotes</span></h2><p>고객 명단 CSV 를 끌어다 놓으면 한 번에 견적을 냅니다.</p></div><div class="body"><div class="drop" id="drop" tabindex="0">여기에 CSV 파일을 끌어다 놓거나 <label for="csv-in" style="text-decoration:underline;cursor:pointer">파일 고르기</label><input type="file" id="csv-in" accept=".csv,text/csv" hidden><br><span class="cap">필요한 열: age, sex, bmi, children, smoker, region (charges 열이 있으면 실제값과 비교)</span></div><div class="btns"><button class="btn" id="csv-sample">예시: 시험 데이터 처음 10명으로 해 보기</button><button class="btn small" id="csv-save" disabled>결과 CSV 받기</button></div><p class="cap" id="csv-cap" aria-live="polite"></p><div class="tblwrap"><table id="csv-t"></table></div><p class="note">파일은 이 브라우저 안에서만 읽습니다. 어디로도 보내지 않습니다. 미리보기 화면에서는 ‘결과 CSV 받기’가 막힐 수 있습니다(GitHub Pages 에서는 동작).</p></div></div></section><section class="part" id="verify"><div class="wrap"><div class="part-head" style="--kc:var(--data)"><div class="hex">4</div><h2>시험 268명 일괄 검증<span class="en">Notebook vs app</span></h2><p>앱의 계산이 노트북(sklearn 대리모델)과 같은지 한 명씩 대조합니다.</p></div><div class="body"><div class="btns"><button class="btn primary" id="v-run">검증 실행</button></div><p class="big" id="v-res" aria-live="polite"></p><p class="cap" id="v-cap"></p><div class="tblwrap"><table id="v-t"></table></div><div class="tblwrap"><table><thead><tr><th>시험 268명 (비용 3:1)</th><th class="r">규칙표 k=0</th><th class="r">규칙표 × (1 +0.06)</th><th class="r">원 모델 GBM</th></tr></thead><tbody><tr><td>1인당 비용</td><td class="r">$6,394</td><td class="r">$6,142</td><td class="r">$4,955</td></tr><tr><td>적게 잡은 비율</td><td class="r">36.2%</td><td class="r">26.5%</td><td class="r">19.4%</td></tr><tr><td>MAE</td><td class="r">$3,113</td><td class="r">$3,384</td><td class="r">$2,470</td></tr><tr><td>$10,000 넘게 적게 잡은 사람</td><td class="r">17명</td><td class="r">17명</td><td class="r">18명</td></tr></tbody></table></div><p class="cap">Python 정식 코드 f6.py 의 결과. 여유분은 비용을 낮추지만 $10,000 넘게 적게 잡은 17명은 그대로입니다. 이들의 큰 청구는 규칙표의 질문(나이 · BMI · 흡연)으로 설명되지 않으며, 이 데이터에는 그 이유를 담은 열이 없습니다.</p></div></div></section><section class="part" id="fair"><div class="wrap"><div class="part-head" style="--kc:var(--core)"><div class="hex">5</div><h2>공정성 메모<span class="en">Who changes the quote?</span></h2><p>성별 · 지역만 바꾸면 견적이 바뀌는 사람 수.</p></div><div class="body"><div class="tblwrap"><table><thead><tr><th>바꾼 것 (시험 268명)</th><th class="r">규칙표 앱</th><th class="r">원 모델 GBM</th></tr></thead><tbody><tr><td>성별만 반대로</td><td class="r">0명</td><td class="r">268명 (최대 $1,360)</td></tr><tr><td>지역을 모두 northeast 로</td><td class="r">0명</td><td class="r">159명 (최대 $1,153)</td></tr></tbody></table></div><p>규칙표는 나이 · BMI · 흡연 여부만 쓰므로 성별이나 지역을 바꿔도 견적이 바뀌지 않습니다. 원 모델은 성별을 바꾸면 268명 모두의 견적이 조금씩(최대 $1,360) 바뀝니다. 실제 보험료 산정에서 성별 · 지역의 사용은 감독 규정에 따라 금지되거나 제한될 수 있으므로, 배포 전에 어떤 열이 견적을 움직이는지 반드시 셉니다.</p><div class="say actuary"><div class="av" data-face="calc" aria-hidden="true"><img src="assets/av_actuary_calc.webp" alt="" width="160" height="160" loading="lazy"></div><div class="sbub"><b>박사<span class="npc" title="NPC">NPC</span></b><p>(손바닥을 든다) …“성별을 안 쓴다”는 말보다 “성별을 바꿔 봤더니 0명이 바뀌었다”는 숫자가 더 강합니다. 그래서, 기준선부터 봅시다. 기준선은 모두에게 같은 금액이라 바뀌는 사람도 0명입니다. 0명이라는 숫자는 공정성의 증거가 아니라 출발점입니다.</p></div></div></div></div></section><section class="part" id="check"><div class="wrap"><div class="part-head" style="--kc:var(--core)"><div class="hex">6</div><h2>확인 문제<span class="en">Check</span></h2><p>정답을 고르면 실제 숫자로 해설합니다.</p></div><div class="body"><div class="q" id="q6-1" data-ok="1" data-ex="규칙표 앱은 HTML 한 장 + 규칙 JSON 으로 인터넷 없이 동작하고, 충실도 R² 0.961 을 대가로 받아들였습니다."><p class="qt">Q1. 이 편이 원 모델(GBM)을 서버에 올리는 대신 규칙표 앱을 고른 가장 큰 이유는?</p><div class="opts"><button data-i="0" data-why="MAE 는 규칙표 $3,113, 원 모델 $2,470 로 원 모델이 더 정확합니다.">규칙표가 원 모델보다 정확해서</button><button data-i="1">상담 창구에 파이썬 · 서버가 없고, 종이 기준서와 앱이 같은 규칙을 써야 사람이 확인할 수 있어서</button><button data-i="2" data-why="옮길 수 있습니다(2부 4편). 다만 파일이 크고 사람이 따라 읽을 수 없습니다.">원 모델은 JS 로 옮길 수 없어서</button></div><p class="fb" aria-live="polite"></p></div><div class="q" id="q6-2" data-ok="2" data-ex="f6.py 에서도 같은 대조를 했습니다: 불일치 0명, 최대 차이 $0.0036 (JSON 에 소수 둘째 자리까지 저장했기 때문)."><p class="qt">Q2. ‘시험 268명 일괄 검증’에서 불일치 0명이 뜻하는 것은?</p><div class="opts"><button data-i="0" data-why="실제값과의 비교가 아니라 노트북(sklearn 대리모델)과의 비교입니다.">규칙표가 실제 의료비를 268명 모두 정확히 맞혔다</button><button data-i="1" data-why="원 모델과는 충실도 0.961 만큼 다릅니다.">원 모델과 규칙표가 같다</button><button data-i="2">페이지 안의 JS 계산이 노트북의 대리모델 예측과 모든 고객에서 같다(배포 과정에서 규칙이 빠지거나 바뀌지 않았다)</button></div><p class="fb" aria-live="polite"></p></div><div class="q" id="q6-3" data-ok="1" data-ex="1인당 비용 $6,394 → $6,142, 적게 잡은 비율 36.2% → 26.5%. 큰 청구의 꼬리는 2부 5편(재보험 대형사고)에서 다시 봅니다."><p class="qt">Q3. 규칙표 견적에 여유분 +0.06 를 곱하자 비용이 줄었지만, $10,000 넘게 적게 잡은 사람은 17명 그대로입니다. 올바른 해석은?</p><div class="opts"><button data-i="0" data-why="+60% 를 얹어도 실제가 견적의 몇 배인 고객은 남습니다. 대신 나머지 고객의 견적이 폭발합니다.">여유분을 더 키우면 해결된다</button><button data-i="1">여유분은 평균적인 부족분을 메울 뿐, 데이터 밖의 사정으로 생긴 큰 청구는 따로(재보험 · 준비금) 다뤄야 한다</button><button data-i="2" data-why="목표값은 지우거나 자르지 않습니다. 꼬리는 오류가 아니라 사실입니다(2편).">그 사람들을 데이터에서 지워야 한다</button></div><p class="fb" aria-live="polite"></p></div><div class="q" id="q6-4" data-ok="0" data-ex="지역을 모두 northeast 로 바꾸면 규칙표 0명, 원 모델 159명(최대 $1,153)의 견적이 바뀝니다."><p class="qt">Q4. 성별을 반대로 바꿨을 때 견적이 바뀐 사람이 규칙표 0명, 원 모델 268명입니다. 이 결과로 할 수 있는 말은?</p><div class="opts"><button data-i="0">규칙표는 성별을 견적에 쓰지 않는다는 것을 실제로 확인했고, 원 모델은 성별이 견적을 움직인다는 것을 확인했다</button><button data-i="1" data-why="바뀐 금액(최대 $1,360)과 이유, 규정을 함께 봐야 합니다. 숫자는 점검의 출발점입니다.">원 모델이 성별을 차별한다고 단정할 수 있다</button><button data-i="2" data-why="나이 · BMI · 흡연이 다른 집단과 얽혀 있을 수 있어, 성별 0명만으로 공정하다고 할 수 없습니다.">규칙표는 모든 면에서 공정하다</button></div><p class="fb" aria-live="polite"></p></div></div></div></section><section class="part" id="practice"><div class="wrap"><div class="part-head" style="--kc:var(--seq)"><div class="hex">7</div><h2>실무로 잇기<span class="en">From page to Colab</span></h2><p>이 페이지 숫자를 만든 코드.</p></div><div class="body"><p>e6 은 다이얼에 고객 한 명을 넣어 규칙표 견적 · 적립 권장액 · 원 모델 견적을 비교하고, 성별을 바꿔 견적이 바뀌는 사람을 셉니다. f6 은 JSON 규칙을 앱과 똑같이 따라가 노트북과 대조하고, 여유분 k 를 학습 데이터 5-Fold 로 고릅니다.</p><div class="codebox"><div class="tabs" role="tablist"><button role="tab" data-src="src-e6" data-info="초보용 · def·for·if·들여쓰기 없음 · 다이얼: AGE, BMI, CHILDREN, SEX, SMOKER, REGION, MARGIN_K">e6.py</button><button role="tab" data-src="src-f6" data-info="정식 코드 · common.py · data/surrogate_tree.json 필요 · 약 30초">f6.py</button><button role="tab" data-src="src-common" data-info="공통 코드 · 1부와 2부가 같은 파일">common.py</button></div><div class="tools"><span></span><button class="btn small" data-act="copy">복사</button><button class="btn small" data-act="py">.py 받기</button><button class="btn small" data-act="nb">.ipynb 받기</button></div><pre><code></code></pre></div><script type="text/plain" id="src-e6" data-file="e6.py" data-formal="0">
+# AI(인공지능) x 비즈니스 #1 인슈어테크_03_회귀모델 · 초보용 코드 e6.py
+# 6편 「기준서가 곧 견적: 의료비 견적 앱」
+# 함수 · 반복문 · if 문 · 들여쓰기 없이 위에서 아래로 읽습니다. 맨 위 [다이얼] 줄만 바꿔 다시 실행하세요.
+
+# ① 다이얼: 견적을 낼 고객
+AGE = 45          # [다이얼] 나이 18 ~ 64
+BMI = 31.0        # [다이얼] 체질량지수
+CHILDREN = 1      # [다이얼] 자녀 수
+SEX = "female"    # [다이얼] "female" 또는 "male"
+SMOKER = "yes"    # [다이얼] "yes" 또는 "no"
+REGION = "southeast"  # [다이얼] northeast · northwest · southeast · southwest
+MARGIN_K = 0.06   # [다이얼] 여유분 k (6편: 학습 데이터 5-Fold 로 고른 값 +0.06)
+
+# ② 데이터 · 나누기 · 선생님 모델 · 대리모델 (5편과 같음, 잎 6개)
+import pandas as pd
+import numpy as np
+from sklearn.model_selection import train_test_split
+from sklearn.ensemble import GradientBoostingRegressor
+from sklearn.tree import DecisionTreeRegressor
+df = pd.read_csv("https://raw.githubusercontent.com/fintech-data/Revolution/main/data/insurance.csv").drop_duplicates()
+X = pd.get_dummies(df.drop(columns="charges"), drop_first=True).astype(float)
+y = df["charges"]
+Xtr, Xte, ytr, yte = train_test_split(X, y, test_size=0.2, stratify=pd.qcut(y, 10, labels=False), random_state=42)
+gbm = GradientBoostingRegressor(n_estimators=200, max_depth=3, learning_rate=0.05, random_state=42).fit(Xtr, ytr)
+sur = DecisionTreeRegressor(max_leaf_nodes=6, random_state=42).fit(Xtr, gbm.predict(Xtr))
+
+# ③ 고객 한 명 견적 (열 순서는 학습 데이터와 같게)
+row = {"age": AGE, "bmi": BMI, "children": CHILDREN, "sex_male": float(SEX == "male"), "smoker_yes": float(SMOKER == "yes")}
+row["region_northwest"] = float(REGION == "northwest")
+row["region_southeast"] = float(REGION == "southeast")
+row["region_southwest"] = float(REGION == "southwest")
+one = pd.DataFrame([row])[X.columns]
+quote = sur.predict(one)[0]
+print("rule-table quote:", round(quote, 2))
+print("with margin k:", round(quote * (1 + MARGIN_K), 2))
+print("original GBM:", round(gbm.predict(one)[0], 2))
+
+# ④ 시험 268명 일괄 견적: 실제보다 $10,000 넘게 적게 잡은 사람 수
+q = sur.predict(Xte) * (1 + MARGIN_K)
+print("test under-estimated by more than $10,000:", int(((yte - q) > 10000).sum()), "of", len(yte))
+
+# ⑤ 공정성: 성별만 바꾸면 견적이 바뀌는 사람 수
+flip = Xte.assign(sex_male=1 - Xte["sex_male"])
+print("quotes changed by flipping sex - rule table:", int((np.abs(sur.predict(flip) - sur.predict(Xte)) > 0.01).sum()))
+print("quotes changed by flipping sex - GBM:", int((np.abs(gbm.predict(flip) - gbm.predict(Xte)) > 1).sum()))
+</script><script type="text/plain" id="src-f6" data-file="f6.py" data-formal="1">
+"""
+AI(인공지능) x 비즈니스 #1 인슈어테크_03_회귀모델 · 정식 코드 f6.py
+6편 「기준서가 곧 견적: 의료비 견적 앱」
+무엇을, 어떤 순서로:
+ ① data/surrogate_tree.json (5편의 대리모델 규칙표)을 읽는다 -> 없으면 f5 를 실행해 만든다
+ ② JSON 규칙을 위에서부터 따라가는 "앱과 같은 계산"으로 시험 268명 견적을 내고, sklearn 대리모델 예측과 대조 (불일치 수 · 최대 차이)
+ ③ 배포할 규칙표에 붙일 여유분 k: 학습 데이터 5-Fold 안에서 (GBM -> 대리나무) 를 통째로 다시 학습한 OOF 견적으로 3:1 비용 최소 k 를 고른다
+ ④ 시험 데이터에 한 번 적용: 비용 · 과소 추정 비율 · 크게 적게 잡은 사람($10,000 넘게)
+ ⑤ 공정성 점검: 성별 · 지역을 바꾸면 견적이 바뀌는 사람 수 (규칙표 vs 원 모델 GBM)
+"""
+import json
+import os
+import numpy as np
+import pandas as pd
+from sklearn.model_selection import StratifiedKFold
+from sklearn.tree import DecisionTreeRegressor
+import common as C
+
+CU, CO = 3.0, 1.0
+KS = np.round(np.arange(-0.30, 0.6001, 0.01), 2)
+BIG_UNDER = 10000.0
+
+
+def load_tree():
+    if not os.path.exists("data/surrogate_tree.json"):
+        import f5
+        f5.run(verbose=False)
+    with open("data/surrogate_tree.json", encoding="utf-8") as f:
+        return json.load(f)
+
+
+def quote_one(nodes, row):
+    """앱(JS)과 똑같은 계산: 뿌리에서 시작해 '<= 기준이면 왼쪽' 으로 내려간다."""
+    i = 0
+    path = []
+    while nodes[i]["left"] is not None:
+        n = nodes[i]
+        go_left = row[n["feature"]] <= n["threshold"]
+        path.append((n["feature"], n["threshold"], go_left))
+        i = n["left"] if go_left else n["right"]
+    return nodes[i]["value"], path
+
+
+def cost(y, q):
+    y, q = np.asarray(y, float), np.asarray(q, float)
+    return float((CU * np.clip(y - q, 0, None).sum() + CO * np.clip(q - y, 0, None).sum()) / len(y))
+
+
+def run(verbose=True):
+    df, X, y, info = C.load_clean_xy()
+    Xtr, Xte, ytr, yte = C.split(X, y)
+    T = load_tree()
+    nodes, L = T["nodes"], T["leaves"]
+
+    # ② JSON 규칙 vs sklearn
+    gbm = C.final_model().fit(Xtr, ytr)
+    sur = DecisionTreeRegressor(max_leaf_nodes=L, random_state=C.SEED).fit(Xtr, gbm.predict(Xtr))
+    sk = sur.predict(Xte)
+    app = np.array([quote_one(nodes, r)[0] for _, r in Xte.iterrows()])
+    diff = np.abs(app - sk)
+    mismatch = int((diff > 0.01).sum())   # JSON 은 소수 둘째 자리로 저장 -> 1센트 넘게 다르면 불일치
+
+    # ③ 여유분 k: 학습 데이터 안의 5-Fold 로 (GBM -> 대리나무) 전체를 다시 학습
+    cv = list(StratifiedKFold(5, shuffle=True, random_state=C.SEED).split(Xtr, C.strata(ytr)))
+    oof = np.zeros(len(ytr))
+    for a, b in cv:
+        g = C.final_model().fit(Xtr.iloc[a], ytr.iloc[a])
+        s = DecisionTreeRegressor(max_leaf_nodes=L, random_state=C.SEED).fit(Xtr.iloc[a], g.predict(Xtr.iloc[a]))
+        oof[b] = s.predict(Xtr.iloc[b])
+    cs = [cost(ytr, oof * (1 + k)) for k in KS]
+    k_best = float(KS[int(np.argmin(cs))])
+
+    # ④ 시험에 한 번
+    q0, q1 = app, app * (1 + k_best)
+    gb = gbm.predict(Xte)
+    res = pd.DataFrame({
+        "quote (k=0)": [cost(yte, q0), np.mean(q0 < yte), np.mean(np.abs(yte - q0)), int(((yte - q0) > BIG_UNDER).sum())],
+        "quote x (1+k)": [cost(yte, q1), np.mean(q1 < yte), np.mean(np.abs(yte - q1)), int(((yte - q1) > BIG_UNDER).sum())],
+        "GBM (original)": [cost(yte, gb), np.mean(gb < yte), np.mean(np.abs(yte - gb)), int(((yte - gb) > BIG_UNDER).sum())],
+    }, index=["cost_3to1", "under_rate", "MAE", "under_by_10k+"])
+
+    # ⑤ 공정성: 성별 · 지역 바꾸기
+    flip_sex = Xte.copy()
+    flip_sex["sex_male"] = 1 - flip_sex["sex_male"]
+    sur_sex = int((np.abs(sur.predict(flip_sex) - sk) > 0.01).sum())
+    gbm_sex_d = np.abs(gbm.predict(flip_sex) - gb)
+    flip_reg = Xte.copy()
+    flip_reg[["region_northwest", "region_southeast", "region_southwest"]] = 0.0   # 모두 northeast 로
+    sur_reg = int((np.abs(sur.predict(flip_reg) - sk) > 0.01).sum())
+    gbm_reg_d = np.abs(gbm.predict(flip_reg) - gb)
+    fair = dict(sur_sex=sur_sex, gbm_sex=int((gbm_sex_d > 1).sum()), gbm_sex_max=float(gbm_sex_d.max()),
+                sur_region=sur_reg, gbm_region=int((gbm_reg_d > 1).sum()), gbm_region_max=float(gbm_reg_d.max()))
+
+    out = dict(nodes=nodes, L=L, used=T["features_used"], app=app, sk=sk, gb=gb, mismatch=mismatch, max_diff=float(diff.max()),
+               k_best=k_best, k_curve=cs, res=res, fair=fair, Xte=Xte, yte=yte)
+    if verbose:
+        print("surrogate rules: %d leaves, features used: %s" % (L, T["features_used"]))
+        print("JSON rules (app) vs sklearn surrogate on test %d: mismatch=%d  max|diff|=%.4f" % (len(yte), mismatch, diff.max()))
+        print("margin k for the rule table, chosen on TRAIN 5-fold (GBM->tree refit per fold), cost 3:1: %+.2f" % k_best)
+        print(res.round(3).to_string())
+        print()
+        print("fairness: quotes changed when sex is flipped  -> rule table %d / GBM %d (max change $%.0f)" %
+              (fair["sur_sex"], fair["gbm_sex"], fair["gbm_sex_max"]))
+        print("fairness: quotes changed when region -> northeast -> rule table %d / GBM %d (max change $%.0f)" %
+              (fair["sur_region"], fair["gbm_region"], fair["gbm_region_max"]))
+    return out
+
+
+if __name__ == "__main__":
+    run()
+</script><script type="text/plain" id="src-common" data-file="common.py" data-formal="0">
+"""
+AI(인공지능) x 비즈니스 #1 인슈어테크_03_회귀모델 · 인슈어테크_04_회귀모델_실전 · 공통 코드 (common.py)
+글 · 안상선 ((주)M-Robo 대표) · CC BY-NC 4.0
+
+두 시리즈(1부 개념편 · 2부 문제편)가 똑같이 쓰는 파일입니다. 정리 규칙이 두 부에서 같아야 숫자를 비교할 수 있습니다.
+
+하는 일
+ ① 건강보험 의료비 데이터 읽기 (공개 학습용 데이터, 1,338행 × 7열)
+    읽는 순서: 내 컴퓨터의 data/insurance.csv -> 이 저장소의 raw 주소 -> 원 출처 주소
+ ② 정리 규칙: 완전히 같은 행 1건만 뺀다. 목표값(charges)은 자르거나 고치지 않는다.
+ ③ 범주형 원-핫 인코딩(drop_first) -> 특성 8개
+ ④ 1부의 학습/시험 나누기: charges 10분위로 층화한 80:20, random_state=42 (data/split.csv 와 같음)
+ ⑤ 기준선: 모두에게 "학습 데이터 평균"만 답하기
+ ⑥ (선택) 흡연 x 비만(BMI 30 이상) 상호작용 특성 만들기 - 2부 3·4편에서 씀
+
+원칙: 데이터 증강(합성 행 · 행 복제 · 정답에 잡음 넣기)은 쓰지 않는다. 원본 행만 쓴다.
+"""
+import os
+import numpy as np
+import pandas as pd
+from sklearn.model_selection import train_test_split, StratifiedKFold
+
+LOCAL_PATHS = ["data/insurance.csv", "../data/insurance.csv", "insurance.csv"]
+REPO_URL = "https://raw.githubusercontent.com/adminmrobo/ai-biz-insurtech-03/main/data/insurance.csv"
+SOURCE_URL = "https://raw.githubusercontent.com/fintech-data/Revolution/main/data/insurance.csv"
+SOURCE_MD5 = "d5364d06246fb4bfa4cc7d1ee89ebd0d"
+SEED = 42
+TARGET = "charges"
+NUM_COLS = ["age", "bmi", "children"]
+CAT_COLS = ["sex", "smoker", "region"]
+BMI_OBESE = 30.0   # WHO 성인 비만 기준 (BMI 30 이상)
+
+
+def load_raw(path=None):
+    """① 원본 데이터 읽기. path 를 주지 않으면 로컬 -> 저장소 -> 원 출처 순서로 찾는다."""
+    if path is None:
+        path = os.environ.get("INS_DATA")
+    if path:
+        return pd.read_csv(path)
+    for p in LOCAL_PATHS:
+        if os.path.exists(p):
+            return pd.read_csv(p)
+    for url in (REPO_URL, SOURCE_URL):
+        try:
+            return pd.read_csv(url)
+        except Exception:
+            pass
+    raise FileNotFoundError("insurance.csv 를 찾지 못했습니다.")
+
+
+def clean(df, verbose=False):
+    """② 정리 규칙. 바뀌는 행 수를 info 에 남긴다.
+
+    - 완전히 같은 행(7개 열이 모두 같음) 1건 -> 뒤의 것을 뺀다
+      (같은 사람이 학습과 시험에 동시에 들어가 점수가 부풀려지는 것을 막기 위해)
+    - charges(목표값): 고액도 그대로 둔다. 자르거나(상한) 지우지 않는다.
+    - bmi IQR 밖 9명(최대 53.13): 사람에게 가능한 값이라 그대로 둔다.
+    - 결측: 없음
+    """
+    n0 = len(df)
+    dup_mask = df.duplicated(keep="first")
+    dup_rows = list(df.index[dup_mask])
+    out = df.loc[~dup_mask].copy()
+    q1, q3 = out[TARGET].quantile([0.25, 0.75])
+    iqr = q3 - q1
+    tgt_iqr = int(((out[TARGET] < q1 - 1.5 * iqr) | (out[TARGET] > q3 + 1.5 * iqr)).sum())
+    b1, b3 = out["bmi"].quantile([0.25, 0.75])
+    biqr = b3 - b1
+    bmi_iqr = int(((out["bmi"] < b1 - 1.5 * biqr) | (out["bmi"] > b3 + 1.5 * biqr)).sum())
+    info = {"rows_raw": n0, "dropped_duplicate_rows": dup_rows, "rows_clean": len(out),
+            "missing": int(df.isna().sum().sum()),
+            "charges_iqr_flagged_kept": tgt_iqr, "bmi_iqr_flagged_kept": bmi_iqr,
+            "charges_changed": 0}
+    if verbose:
+        print("rule | rows changed")
+        print("drop exact duplicate | %d (row %s)" % (len(dup_rows), dup_rows))
+        print("charges IQR flagged, kept as is | %d" % tgt_iqr)
+        print("bmi IQR flagged, kept as is | %d" % bmi_iqr)
+        print("missing values | %d" % info["missing"])
+    return out, info
+
+
+def encode(df):
+    """③ X(원-핫, drop_first) 와 y(charges) 만들기. 열 순서는 고정."""
+    y = df[TARGET].astype(float)
+    X = pd.get_dummies(df.drop(columns=TARGET), columns=CAT_COLS, drop_first=True).astype(float)
+    cols = ["age", "bmi", "children", "sex_male", "smoker_yes",
+            "region_northwest", "region_southeast", "region_southwest"]
+    for c in cols:
+        if c not in X.columns:
+            X[c] = 0.0
+    return X[cols], y
+
+
+def add_interactions(X):
+    """⑥ 흡연 x 비만 상호작용. 흡연자이면서 BMI 30 이상인 사람의 의료비가 따로 뛰는 것을 직선 모델이 잡게 한다."""
+    X = X.copy()
+    X["bmi30"] = (X["bmi"] >= BMI_OBESE).astype(float)
+    X["smoker_bmi30"] = X["smoker_yes"] * X["bmi30"]
+    X["smoker_bmi"] = X["smoker_yes"] * X["bmi"]
+    return X
+
+
+def strata(y, q=10):
+    """분위 층화용 꼬리표: 금액을 q 개 구간으로 나눈 번호."""
+    return pd.qcut(y, q, labels=False, duplicates="drop")
+
+
+def split(X, y):
+    """④ 1부의 학습/시험 나누기 (charges 10분위 층화, 80:20, random_state=42)."""
+    return train_test_split(X, y, test_size=0.2, stratify=strata(y), random_state=SEED)
+
+
+def folds(y, n_splits=5):
+    """2부의 5-Fold: charges 10분위로 층화한 StratifiedKFold(shuffle=True, random_state=42)."""
+    skf = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=SEED)
+    return list(skf.split(np.zeros(len(y)), strata(y)))
+
+
+def baseline(y_train, n):
+    """⑤ 기준선: 모두에게 학습 데이터 평균만 답한다."""
+    return np.full(n, float(np.mean(y_train)))
+
+
+def metrics(y, p):
+    """주지표 + 보조 지표. MAE 를 주지표로, RMSE · R² · 고액(상위 10%) MAE · 과소 추정 비율을 함께."""
+    y = np.asarray(y, float)
+    p = np.asarray(p, float)
+    e = y - p
+    top = y >= np.quantile(y, 0.9)
+    ss_res = float(np.sum(e ** 2))
+    ss_tot = float(np.sum((y - y.mean()) ** 2))
+    return {"MAE": float(np.mean(np.abs(e))), "RMSE": float(np.sqrt(np.mean(e ** 2))),
+            "R2": 1 - ss_res / ss_tot, "MAE_top10": float(np.mean(np.abs(e[top]))),
+            "under_rate": float(np.mean(p < y)), "bias": float(np.mean(p - y))}
+
+
+# 최종 모델 설정: 1부 3편에서 "학습 데이터만" 5-Fold 교차검증(MAE)으로 고른 값
+# (n_estimators 100/200/300 x max_depth 2/3/4 x learning_rate 0.05/0.1 중 1위)
+FINAL_PARAMS = {"n_estimators": 200, "max_depth": 3, "learning_rate": 0.05, "random_state": SEED}
+
+MODEL_NAMES = ["Linear", "Ridge", "Decision Tree", "KNN", "Gradient Boosting"]
+MODEL_KO = {"Linear": "선형 회귀", "Ridge": "릿지", "Decision Tree": "의사결정나무", "KNN": "KNN",
+            "Gradient Boosting": "그래디언트 부스팅"}
+
+
+def models():
+    """두 부가 같이 쓰는 모델 다섯. 표준화가 필요한 모델은 Pipeline 안에서 학습 데이터에만 fit."""
+    from sklearn.pipeline import make_pipeline
+    from sklearn.preprocessing import StandardScaler
+    from sklearn.linear_model import LinearRegression, Ridge
+    from sklearn.tree import DecisionTreeRegressor
+    from sklearn.neighbors import KNeighborsRegressor
+    from sklearn.ensemble import GradientBoostingRegressor
+    return {
+        "Linear": make_pipeline(StandardScaler(), LinearRegression()),
+        "Ridge": make_pipeline(StandardScaler(), Ridge(alpha=1.0)),
+        "Decision Tree": DecisionTreeRegressor(max_depth=4, random_state=SEED),
+        "KNN": make_pipeline(StandardScaler(), KNeighborsRegressor(n_neighbors=10)),
+        "Gradient Boosting": GradientBoostingRegressor(**FINAL_PARAMS),
+    }
+
+
+def final_model():
+    from sklearn.ensemble import GradientBoostingRegressor
+    return GradientBoostingRegressor(**FINAL_PARAMS)
+
+
+def load_clean_xy():
+    """한 줄로: 읽기 -> 정리 -> X, y (원본 행 번호를 index 로 유지)."""
+    df, info = clean(load_raw())
+    X, y = encode(df)
+    return df, X, y, info
+</script>
+<details class="run"><summary>실행 결과 보기 (정식 코드 f6.py 를 실제로 실행한 출력)</summary><pre>surrogate rules: 6 leaves, features used: [&#x27;age&#x27;, &#x27;bmi&#x27;, &#x27;smoker_yes&#x27;]
+JSON rules (app) vs sklearn surrogate on test 268: mismatch=0  max|diff|=0.0036
+margin k for the rule table, chosen on TRAIN 5-fold (GBM-&gt;tree refit per fold), cost 3:1: +0.06
+               quote (k=0)  quote x (1+k)  GBM (original)
+cost_3to1         6394.335       6141.746        4955.029
+under_rate           0.362          0.265           0.194
+MAE               3113.414       3383.936        2470.169
+under_by_10k+       17.000         17.000          18.000
+
+fairness: quotes changed when sex is flipped  -&gt; rule table 0 / GBM 268 (max change $1360)
+fairness: quotes changed when region -&gt; northeast -&gt; rule table 0 / GBM 159 (max change $1153)</pre></details></div></div></section><section class="part" id="prompt"><div class="wrap"><div class="part-head" style="--kc:var(--seq)"><div class="hex">✦</div><h2>AI와 함께 더 공부하기<span class="en">AI tutor prompt</span></h2><p>ChatGPT·Claude·Gemini 등에 그대로 붙여 넣으세요. [ ] 안만 바꾸면 됩니다.</p></div><div class="body"><div class="prompt"><pre id="prompt-6"># 역할
+당신은 보험 데이터 분석을 가르치는 친절한 튜터입니다. 저는 「AI(인공지능) x 비즈니스 #1 인슈어테크_03_회귀모델」 1부 6편 「기준서가 곧 견적: 의료비 견적 앱」을 공부하고 있습니다.
+
+# 배경
+- 데이터: 공개 학습용 건강보험 의료비 데이터 1,338행 (https://raw.githubusercontent.com/fintech-data/Revolution/main/data/insurance.csv)
+- 열: age(나이) · sex(성별) · bmi(체질량지수) · children(자녀 수) · smoker(흡연 여부) · region(미국 내 지역 4곳) · charges(1년 의료비 청구 금액, 달러 = 맞힐 대상)
+- 완전히 같은 행 1건을 빼고 1,337행을 씁니다. 목표값 charges 는 자르거나 고치지 않습니다(고액은 오류가 아니라 꼬리).
+- 학습/시험 나누기는 charges 10분위 층화 80:20, random_state=42 로 미리 정해져 있습니다(학습 1,069명, 시험 268명).
+- 기준선: 모두에게 학습 데이터 평균만 답하기 (R² = 0 근처)
+- 내 수준: [예: 파이썬은 조금, 통계는 처음]
+
+# 해 줄 일
+1. 규칙표 JSON(노드: feature, threshold, left, right, value)을 따라 견적을 내는 JavaScript 함수를 써 주세요.
+2. 그 함수의 결과가 Python 대리모델 예측과 같은지 시험 데이터 전체로 대조하는 방법을 알려 주세요.
+3. 배포 방식(서버 API · 원 모델 JS 이식 · 규칙표 앱 · 종이)의 장단점을 제 상황 [ ] 에 맞춰 비교해 주세요.
+4. 성별 · 지역을 바꿨을 때 견적이 바뀌는 사람 수를 세는 코드를 써 주세요.
+
+# 반드시 지킬 것
+- 기호나 약어(MAE, RMSE, R² 등)는 처음 나올 때 한 줄로 설명하기
+- 데이터 증강(합성 행 · 행 복제 · 정답에 잡음 넣기)은 쓰지 않기
+- 전처리(표준화 · 인코딩)는 Pipeline 안에서 학습 데이터에만 fit (데이터 누수 금지)
+- 여유분 · 하이퍼파라미터는 학습 데이터의 교차검증으로만 고르기 (시험 데이터는 마지막에 한 번만)
+- R² 하나만 보고하지 않기: MAE · RMSE · 고액(상위 10%) MAE · 과소 추정 비율을 기준선과 함께
+- 로그 변환을 썼다면 예측을 달러로 되돌려 평가하기
+- 코드는 Google Colab 에서 바로 실행되게, random_state=42 고정, 내가 바꿀 줄에는 # [변경] 주석
+
+내 결과: [숫자 붙여 넣기]
+내가 쓴 문장: [붙여 넣기]
+
+# 답변 형식
+1) 내 숫자를 기준선과 비교해 해석  2) 내 문장에서 틀리거나 과장된 곳  3) 답을 바로 주기 전에, 내가 스스로 확인할 질문 3개</pre></div><div class="btns"><button class="btn small" data-copy="prompt-6">프롬프트 복사</button><button class="btn small" data-save="prompt-6" data-name="ai_prompt_6.txt">.txt 받기</button></div></div></div></section><section class="part" id="glossary"><div class="wrap"><div class="part-head" style="--kc:var(--core)"><div class="hex">?</div><h2>용어 사전<span class="en">Glossary</span></h2><p>비유로 먼저, 뜻은 그다음.</p></div><div class="body"><dl class="gloss"><div><dt>배포</dt><dd><i>모델을 현장에 내보내기.</i> 학습한 모델이 실제 견적을 내도록 옮기는 일.</dd></div><div><dt>규칙표 앱</dt><dd><i>종이 기준서와 같은 앱.</i> 대리모델 JSON 을 브라우저에서 그대로 따라가는 HTML.</dd></div><div><dt>불일치 0</dt><dd><i>노트북과 앱이 같은 답.</i> 배포 과정에서 규칙이 빠지거나 바뀌지 않았다는 증거.</dd></div><div><dt>적립 권장액</dt><dd><i>쿠션을 얹은 견적.</i> 견적 × (1 + k). k 는 학습 데이터로 고른 여유분.</dd></div><div><dt>반사실 점검</dt><dd><i>그 칸만 바꿔 보기.</i> 성별 · 지역만 바꿨을 때 견적이 바뀌는 사람 수를 센다.</dd></div><div><dt>JSON</dt><dd><i>규칙을 담는 상자.</i> 프로그램끼리 주고받는 글자 형식. 규칙표 한 파일.</dd></div></dl></div></div></section><section class="part" id="author-sec"><div class="wrap"><div class="body"><a class="teach-link" href="answers.html#a6">강사·튜터라면 → 교육자용 정답 (6편): 정답 · 채점 기준 · 강의 멘트</a>
+<div class="card"><h3>글 · 안상선 ((주)M-Robo 대표)</h3><p class="cap">(주)M-Robo 대표. 금융·보험 데이터와 AI를 현장에서 쓰는 방법을, 버튼만 눌러 따라 할 수 있는 교재로 만듭니다.</p></div></div></div></section><section class="outro" id="outro"><div class="wrap"><div class="body"><h2>수고하셨습니다!</h2><img class="scene" src="assets/s6.webp" alt="상담 창구에서 태블릿 견적 앱과 종이 기준서를 나란히 펼친 조교와, 일치 표시가 켜진 머니로보" width="1440" height="800" loading="lazy"><div class="chat"><div class="say actuary"><div class="av" data-face="explain" aria-hidden="true"><img src="assets/av_actuary_explain.webp" alt="" width="160" height="160" loading="lazy"></div><div class="sbub"><b>박사<span class="npc" title="NPC">NPC</span></b><ul><li>배포 방식 넷 중 규칙표 앱: HTML 한 장, 인터넷 없이, 종이와 같은 규칙</li><li>시험 268명 노트북 대조 불일치 0명. 여유분 +0.06 로 1인당 비용 $6,394 → $6,142</li><li>성별을 바꾸면 견적이 바뀌는 사람: 규칙표 0명, 원 모델 268명. 쓰는 열을 숫자로 센다</li></ul></div></div><div class="say bomi"><div class="av" data-face="proud" aria-hidden="true"><img src="assets/av_bomi_proud.webp" alt="" width="160" height="160" loading="lazy"></div><div class="sbub"><b>조교</b><p>평균의 함정에서 시작해서 종이 한 장 앱까지 왔어요. 머니로보가 드디어 견적을 냈어요. 물론 돈은 안 받고요.</p></div></div><div class="say fly"><div class="av" data-face="idea" aria-hidden="true"><img src="assets/av_fly_idea.webp" alt="" width="160" height="160" loading="lazy"></div><div class="sbub"><b>초파리 연구원</b><p>그런데 이걸 과제로 내면요? 시험 268명 한 번으로 잰 숫자, 운 아니에요? 저는 두 달이면 최고령이라 한 번 재고 끝내는 게 제일 무서워요.</p></div></div></div><div class="nav-eps"><a class="btn" href="5_surrogate_tree.html">← 이전 편</a><a class="btn" href="index.html">처음 화면</a><a class="btn primary" href="https://adminmrobo.github.io/ai-biz-insurtech-04/">2부(실전)로: 이걸 과제로 내면? →</a></div></div></div></section></main><footer><div class="wrap"><p><b>기준서가 곧 견적: 의료비 견적 앱</b> · AI(인공지능) x 비즈니스 #1 인슈어테크_03_회귀모델</p><p>글 · 안상선 ((주)M-Robo 대표)</p><p><b>설명용 모형인 것:</b> 이 시리즈는 공개 학습용 건강보험 의료비 데이터(1,338행)를 그대로 씁니다. 가상 데이터를 만들거나 데이터를 증강하지 않습니다. 완전히 같은 행 1건만 빼고, 목표값(charges)은 자르거나 고치지 않습니다. 견적 앱은 data/surrogate_tree.json 과 같은 규칙을 페이지 안에 넣어 브라우저에서 계산합니다. 시험 268명의 행은 검증용으로 페이지에 들어 있습니다.</p><p><b>주의:</b> 이 시리즈는 교육용 설명입니다. 보험 가입 · 보험료 · 보험금 심사 · 투자 · 의료에 대한 조언이 아닙니다. 데이터는 공개 학습 데이터 원본이며, 실제 보험사의 현재 보험료 산정 · 심사 기준을 뜻하지 않습니다. 건강 정보(흡연 · BMI)는 설명용이며 의료 조언이 아닙니다. 실제 보험료 산정에서 성별 · 지역 · 나이 같은 특성의 사용은 감독 규정에 따라 금지되거나 제한될 수 있습니다.</p><p><b>데이터:</b> 공개 학습용 Medical Cost(insurance.csv) 데이터 (<a href="https://raw.githubusercontent.com/fintech-data/Revolution/main/data/insurance.csv">원본 CSV</a>) · 저장소 사본 <a href="data/insurance.csv">data/insurance.csv</a> (md5 <span class="mono">d5364d06246fb4bfa4cc7d1ee89ebd0d</span>) · 나누기 <a href="data/split.csv">data/split.csv</a></p><p><b>참고:</b> scikit-learn User Guide (Linear Models, Nearest Neighbors, Decision Trees, Ensembles, Model evaluation)</p><p><a href="https://creativecommons.org/licenses/by-nc/4.0/deed.ko">CC BY-NC 4.0</a> — 출처 표기 예: “AI(인공지능) x 비즈니스 #1 인슈어테크_03_회귀모델, 글 · 안상선 ((주)M-Robo 대표), CC BY-NC 4.0”</p></div></footer>
+<p id="lang-note" class="note" hidden style="position:fixed;bottom:12px;left:12px;right:12px;z-index:30"></p>
+<script>const SITE="https://adminmrobo.github.io/ai-biz-insurtech-03/";
+// ---------- 공통: 테마 색 읽기 ----------
+function cssv(n){return getComputedStyle(document.documentElement).getPropertyValue(n).trim()}
+const REDRAW=[];function onTheme(f){REDRAW.push(f)}
+try{matchMedia('(prefers-color-scheme: dark)').addEventListener('change',()=>REDRAW.forEach(f=>f()))}catch(e){}
+new MutationObserver(()=>REDRAW.forEach(f=>f())).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});
+// 캔버스 준비 (선명하게)
+function prep(cv,h){const r=cv.getBoundingClientRect();const w=Math.max(200,r.width||cv.parentNode.clientWidth||600);const d=window.devicePixelRatio||1;cv.width=w*d;cv.height=h*d;cv.style.height=h+'px';const c=cv.getContext('2d');c.setTransform(d,0,0,d,0,0);return {c,w,h}}
+let RZ;addEventListener('resize',()=>{clearTimeout(RZ);RZ=setTimeout(()=>REDRAW.forEach(f=>f()),150)});
+const fmtP=(x,d=1)=>(x*100).toFixed(d)+'%';
+const nf=n=>Number(n).toLocaleString('en-US');
+// ---------- 확인 문제 ----------
+document.querySelectorAll('.q').forEach(q=>{const ok=q.dataset.ok,fb=q.querySelector('.fb');q.querySelectorAll('.opts button').forEach(b=>b.addEventListener('click',()=>{
+ q.querySelectorAll('.opts button').forEach(x=>x.classList.remove('right','wrong'));
+ if(b.dataset.i===ok){b.classList.add('right');fb.innerHTML='<b>정답입니다.</b> '+q.dataset.ex}else{b.classList.add('wrong');fb.innerHTML='<b>다시 생각해 보세요.</b> '+(b.dataset.why||'')}}))});
+// ---------- 복사 · 내려받기 ----------
+function copyTxt(t,btn){const o=btn.textContent;const done=()=>{btn.textContent='복사됨';setTimeout(()=>btn.textContent=o,1300)};try{navigator.clipboard.writeText(t).then(done,()=>{btn.textContent='직접 선택해 복사하세요'})}catch(e){btn.textContent='직접 선택해 복사하세요'}}
+function saveFile(name,text,type){try{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([text],{type:type||'text/plain'}));a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},500)}catch(e){}}
+function toIpynb(src,formal){const lines=src.split('\n');const cells=[];let cur=[];
+ lines.forEach(l=>{if(/^# [①-⑳]/.test(l)&&cur.join('').trim()){cells.push(cur);cur=[]}cur.push(l)});if(cur.join('').trim())cells.push(cur);
+ const mk=a=>{while(a.length&&!a[a.length-1].trim())a.pop();return {cell_type:'code',metadata:{},execution_count:null,outputs:[],source:a.map((l,i)=>i<a.length-1?l+'\n':l)}};
+ const out=cells.map(mk).filter(c=>c.source.join('').trim());
+ if(formal)out.unshift(mk(['# 공통 코드 내려받기 (Colab)','!wget -q -O common.py '+SITE+'code/common.py']));
+ return JSON.stringify({cells:out,metadata:{kernelspec:{name:'python3',display_name:'Python 3'},language_info:{name:'python'}},nbformat:4,nbformat_minor:5},null,1)}
+document.querySelectorAll('.codebox').forEach(box=>{const tabs=[...box.querySelectorAll('.tabs button')];const pre=box.querySelector('pre code');const info=box.querySelector('.tools span');
+ let curId=null;function show(b){tabs.forEach(t=>t.setAttribute('aria-selected',t===b?'true':'false'));curId=b.dataset.src;const s=document.getElementById(curId);pre.textContent=s.textContent.replace(/^\n/,'');info.textContent=b.dataset.info||''}
+ tabs.forEach(t=>t.addEventListener('click',()=>show(t)));if(tabs[0])show(tabs[0]);
+ box.querySelector('[data-act=copy]').addEventListener('click',e=>copyTxt(pre.textContent,e.currentTarget));
+ box.querySelector('[data-act=py]').addEventListener('click',()=>{const s=document.getElementById(curId);saveFile(s.dataset.file,pre.textContent,'text/x-python')});
+ box.querySelector('[data-act=nb]').addEventListener('click',()=>{const s=document.getElementById(curId);saveFile(s.dataset.file.replace(/\.py$/,'.ipynb'),toIpynb(pre.textContent,s.dataset.formal==='1'),'application/json')})});
+document.querySelectorAll('[data-copy]').forEach(b=>b.addEventListener('click',e=>copyTxt(document.getElementById(b.dataset.copy).textContent,e.currentTarget)));
+document.querySelectorAll('[data-save]').forEach(b=>b.addEventListener('click',()=>saveFile(b.dataset.name,document.getElementById(b.dataset.save).textContent)));
+// ---------- 상태 캐릭터 ----------
+function robo(id,st){const w=document.getElementById(id);if(!w||w.dataset.st===st)return;w.dataset.st=st;w.querySelectorAll('[data-rs]').forEach(e=>e.hidden=e.dataset.rs!==st)}
+// ---------- 식구 카드: 모습 바꾸기 ----------
+document.querySelectorAll('.crew .moods button').forEach(b=>b.addEventListener('click',()=>{const card=b.closest('.crew');
+ card.querySelectorAll('.moods button').forEach(x=>x.setAttribute('aria-pressed',x===b?'true':'false'));
+ card.querySelectorAll('.cf').forEach(f=>f.classList.toggle('on',f.dataset.face===b.dataset.fb))}));
+// ---------- 막대 (기준선 포함) ----------
+function setBar(el,v,base){el.querySelector('.fill').style.width=Math.max(0,Math.min(1,v))*100+'%';const bl=el.querySelector('.base');if(bl){if(base==null)bl.hidden=true;else{bl.hidden=false;bl.style.left='calc('+base*100+'% - 1px)'}}el.querySelector('.v').textContent=fmtP(v)}
+
+// ---------- 회귀용 도우미 ----------
+const fmtD=(x,d=0)=>(x<0?'−$':'$')+Math.abs(x).toLocaleString('en-US',{maximumFractionDigits:d,minimumFractionDigits:d});
+const fmt=(x,d=3)=>Number(x).toFixed(d);
+function setBarV(el,frac,base,txt){el.querySelector('.fill').style.width=Math.max(0,Math.min(1,frac))*100+'%';const bl=el.querySelector('.base');if(bl){if(base==null)bl.hidden=true;else{bl.hidden=false;bl.style.left='calc('+Math.max(0,Math.min(1,base))*100+'% - 1px)'}}el.querySelector('.v').textContent=txt}
+// 간단한 좌표 그림: plot(cv,{h,x:[min,max],y:[min,max],xt:[...],yt:[...],xl,yl,xf,yf,draw:(c,X,Y)=>{}})
+function plot(cv,o){const {c,w,h}=prep(cv,o.h||320);const L=o.left||62,R=12,T=12,B=o.bottom||40;const X=v=>L+(v-o.x[0])/(o.x[1]-o.x[0])*(w-L-R);const Y=v=>h-B-(v-o.y[0])/(o.y[1]-o.y[0])*(h-T-B);
+ c.clearRect(0,0,w,h);c.font='11px '+cssv('--f-mono');c.lineWidth=1;
+ (o.yt||[]).forEach(t=>{c.strokeStyle=cssv('--grid');c.beginPath();c.moveTo(L,Math.round(Y(t))+.5);c.lineTo(w-R,Math.round(Y(t))+.5);c.stroke();c.fillStyle=cssv('--muted');c.textAlign='right';c.fillText((o.yf||String)(t),L-6,Y(t)+4)});
+ (o.xt||[]).forEach(t=>{c.fillStyle=cssv('--muted');c.textAlign='center';c.fillText((o.xf||String)(t),X(t),h-B+16)});
+ c.strokeStyle=cssv('--line');c.strokeRect(L+.5,T+.5,w-L-R-1,h-T-B-1);
+ c.fillStyle=cssv('--muted');c.textAlign='center';if(o.xl)c.fillText(o.xl,L+(w-L-R)/2,h-6);
+ if(o.yl){c.save();c.translate(12,T+(h-T-B)/2);c.rotate(-Math.PI/2);c.fillText(o.yl,0,0);c.restore()}
+ c.save();c.beginPath();c.rect(L,T,w-L-R,h-T-B);c.clip();if(o.draw)o.draw(c,X,Y,w,h);c.restore();return {c,X,Y,w,h,L,R,T,B}}
+function dot(c,x,y,r,col,a){c.globalAlpha=a==null?1:a;c.fillStyle=col;c.beginPath();c.arc(x,y,r,0,7);c.fill();c.globalAlpha=1}
+function line(c,pts,col,lw,dash){c.strokeStyle=col;c.lineWidth=lw||2;c.setLineDash(dash||[]);c.beginPath();pts.forEach((p,i)=>i?c.lineTo(p[0],p[1]):c.moveTo(p[0],p[1]));c.stroke();c.setLineDash([]);c.lineWidth=1}
+const kfmt=v=>v>=1000?'$'+(v/1000).toFixed(0)+'k':'$'+v;
+
+const D={"nodes":[{"id":0,"feature":"smoker_yes","threshold":0.5,"left":1,"right":2,"value":13250.14,"n":1069},{"id":1,"feature":"age","threshold":42.5,"left":5,"right":6,"value":8490.98,"n":855},{"id":2,"feature":"bmi","threshold":30.01,"left":3,"right":4,"value":32264.53,"n":214},{"id":3,"feature":null,"threshold":null,"left":null,"right":null,"value":21338.87,"n":98},{"id":4,"feature":"age","threshold":41.5,"left":7,"right":8,"value":41494.83,"n":116},{"id":5,"feature":null,"threshold":null,"left":null,"right":null,"value":5452.28,"n":474},{"id":6,"feature":"age","threshold":58.5,"left":9,"right":10,"value":12271.42,"n":381},{"id":7,"feature":null,"threshold":null,"left":null,"right":null,"value":38310.21,"n":62},{"id":8,"feature":null,"threshold":null,"left":null,"right":null,"value":45151.25,"n":54},{"id":9,"feature":null,"threshold":null,"left":null,"right":null,"value":11303.73,"n":289},{"id":10,"feature":null,"threshold":null,"left":null,"right":null,"value":15311.21,"n":92}],"k":0.06,"te":{"age":[19,29,47,52,34,45,50,31,28,50,61,57,27,21,32,47,58,57,19,21,37,48,48,21,41,21,23,49,44,30,41,19,20,60,23,32,39,44,18,43,38,19,56,55,62,44,63,23,39,18,62,61,57,30,32,23,35,26,18,31,22,43,60,21,49,31,40,49,32,23,20,25,41,53,48,46,59,25,55,19,20,28,19,19,29,53,35,41,26,29,24,41,39,40,23,58,19,19,58,45,30,53,59,58,34,25,57,29,60,57,22,49,47,39,38,19,63,61,26,28,37,52,44,63,41,49,18,39,56,42,29,31,61,36,45,36,51,47,28,47,57,64,20,30,40,55,23,41,49,64,43,49,62,64,40,50,41,31,19,44,24,41,44,58,24,55,35,58,24,27,40,50,35,23,48,43,33,24,27,28,33,44,25,60,55,30,31,27,61,52,46,51,34,22,33,45,55,50,25,19,45,38,64,39,54,24,21,20,30,18,18,59,21,43,59,29,42,40,55,51,53,24,25,18,27,18,34,37,41,26,54,19,48,32,58,38,54,28,26,40,18,50,33,36,38,54,54,53,44,21,36,40,30,48,25,25,18,50,37,18,48,47,51,54,30,25,59,55],"sex":["female","male","female","male","male","female","male","female","male","female","female","male","female","male","male","male","female","male","female","male","male","male","male","male","male","female","male","female","male","female","male","male","female","female","male","female","female","male","female","male","male","female","male","female","female","female","female","male","male","male","female","male","female","female","male","female","male","male","male","female","male","female","male","male","male","female","female","male","male","male","male","female","male","male","male","male","male","male","female","female","male","male","female","male","female","female","male","male","female","male","female","female","female","male","male","female","male","male","male","female","male","male","male","male","female","female","female","male","male","female","female","female","female","female","female","female","male","male","male","male","male","female","male","male","male","female","male","female","female","male","female","male","female","female","male","female","male","male","female","male","male","male","female","male","female","male","male","female","male","female","female","male","male","male","male","female","male","male","male","female","female","male","female","male","male","female","male","male","male","male","male","female","male","female","female","female","female","male","female","male","male","male","female","male","male","female","female","female","female","female","male","female","male","female","male","male","male","male","female","male","male","female","female","male","female","female","female","male","male","male","female","female","male","female","female","male","female","female","female","female","male","male","female","male","female","female","female","male","female","male","male","male","female","female","female","male","female","male","female","female","male","female","female","female","female","female","female","female","female","female","male","male","female","female","male","male","male","male","female","female","male","female","female","male","male","female","male","male"],"bmi":[28.6,22.515,36.63,34.1,27.0,25.175,36.2,21.755,33.0,27.83,22.04,42.13,32.395,31.1,28.88,38.94,33.1,40.37,18.6,27.36,37.07,40.565,30.78,31.02,29.64,33.63,26.51,27.17,31.35,32.4,28.8,22.61,30.59,24.035,35.2,29.8,24.225,32.015,30.305,20.13,27.835,32.49,31.79,30.5,25.0,27.645,26.98,17.385,35.3,28.5,30.495,28.31,20.1,33.33,37.335,42.75,30.5,30.0,15.96,30.495,34.8,35.64,28.9,22.3,30.3,31.065,29.6,25.84,30.8,34.4,28.025,42.13,33.55,31.16,32.3,43.89,29.7,27.55,30.14,30.495,27.93,35.435,29.8,27.265,32.11,35.9,24.42,28.405,29.64,34.4,39.49,37.1,18.3,26.315,23.845,32.395,25.555,44.88,23.3,27.83,35.3,36.1,25.46,35.7,33.25,28.595,28.7,27.94,32.8,29.81,20.235,23.18,32.0,32.8,30.69,40.5,21.66,33.535,46.53,26.98,22.705,37.525,37.1,28.31,34.21,21.3,33.33,24.89,33.82,26.07,21.755,29.81,44.0,30.02,20.35,25.9,39.7,28.215,17.29,36.2,31.54,36.96,33.3,31.4,27.4,32.775,41.91,31.02,32.3,39.33,46.2,29.83,31.46,25.6,34.105,33.7,34.2,31.065,24.6,32.34,27.6,23.94,20.235,34.865,35.86,25.365,36.67,28.595,32.7,32.67,22.705,28.12,39.71,36.67,27.265,20.045,18.5,28.5,17.955,24.3,33.44,21.85,20.8,28.595,37.715,21.945,32.775,24.75,29.07,31.73,33.44,18.05,25.3,30.4,35.245,27.5,33.0,26.6,32.23,34.9,30.2,27.6,22.99,45.43,23.0,33.99,21.89,27.3,38.83,23.32,38.28,23.655,28.975,26.885,36.765,29.64,24.985,29.81,26.8,37.05,28.88,28.5,26.79,26.18,31.4,39.82,23.56,30.8,33.155,27.06,30.02,34.8,27.93,41.1,29.0,34.7,28.88,30.875,19.8,28.12,34.43,27.6,36.29,26.2,40.565,31.9,21.47,26.6,36.48,34.6,33.82,19.8,23.655,32.3,45.54,24.13,21.565,32.3,38.39,31.35,28.0,29.545,25.8,29.2,28.69,34.485,37.1,37.3],"children":[5,3,1,0,2,2,0,0,3,3,0,1,1,0,0,2,0,0,0,0,1,2,3,0,5,2,0,0,1,1,1,0,0,0,1,2,5,2,0,2,2,0,2,0,0,0,0,1,2,0,2,1,1,1,1,1,1,1,0,3,3,1,0,1,0,0,0,2,3,0,1,1,0,1,1,3,2,0,2,0,0,0,0,2,2,2,3,1,4,0,0,2,5,1,0,1,0,0,0,2,0,1,1,0,1,0,0,0,0,0,0,2,1,0,1,0,1,0,1,2,3,2,2,0,1,1,0,3,2,1,1,0,0,0,3,1,1,4,0,1,0,2,0,1,1,0,0,0,3,0,0,1,1,2,1,4,2,3,1,1,0,1,1,0,0,3,1,0,0,0,2,3,4,2,1,2,1,2,2,5,5,3,1,0,3,1,2,0,0,2,1,0,2,0,0,3,0,0,1,0,1,0,0,2,3,0,2,0,1,1,0,0,0,0,1,1,2,1,1,3,0,0,2,2,0,0,0,0,3,0,0,0,4,0,0,2,2,0,1,1,0,1,3,0,1,1,3,0,0,0,1,1,3,2,2,0,0,1,0,4,1,1,1,1,3,0,1,0],"smoker":["no","no","yes","no","no","no","no","no","no","no","no","yes","no","no","no","yes","no","no","no","no","yes","yes","no","no","no","no","no","no","yes","no","no","no","no","no","no","no","no","no","no","yes","no","yes","yes","no","no","no","yes","no","yes","no","no","yes","no","no","no","yes","no","no","no","no","no","no","no","no","no","no","no","yes","no","no","yes","no","no","no","no","no","no","no","no","no","no","no","no","no","no","no","yes","no","no","yes","no","no","yes","no","no","no","no","yes","no","no","yes","no","no","no","no","no","no","no","yes","yes","no","no","no","no","no","no","no","no","no","no","no","no","no","no","no","no","no","yes","no","yes","yes","yes","no","no","no","no","no","no","no","no","no","yes","no","no","no","no","no","no","no","no","yes","no","no","no","no","no","no","no","no","no","no","no","yes","no","no","no","yes","no","yes","no","no","no","no","yes","no","yes","no","no","yes","no","no","no","no","no","no","no","no","yes","yes","no","no","no","yes","yes","no","no","no","no","no","yes","no","no","yes","no","no","no","no","yes","no","no","no","yes","no","yes","yes","no","no","no","no","yes","no","yes","no","no","yes","no","no","no","no","yes","no","yes","no","no","no","no","no","no","no","yes","no","yes","no","no","no","no","no","no","no","no","no","yes","yes","no","yes","yes","yes","yes","yes","no","yes","no","no","no","yes","no","no","no"],"region":["southwest","northeast","southeast","southeast","southwest","northeast","southwest","northwest","southeast","southeast","northeast","southeast","northeast","southwest","northwest","southeast","southwest","southeast","southwest","northeast","southeast","northwest","northeast","southeast","northeast","northwest","southeast","southeast","northeast","southwest","southwest","northwest","northeast","northwest","southwest","southwest","northwest","northwest","northeast","southeast","northwest","northwest","southeast","southwest","southwest","northwest","northwest","northwest","southwest","northeast","northwest","northwest","southwest","southeast","northeast","northeast","southwest","southwest","northeast","northeast","southwest","southeast","southwest","southwest","southwest","northeast","southwest","northwest","southwest","southwest","northwest","southeast","southeast","northwest","northwest","southeast","southeast","northwest","southeast","northwest","northeast","northeast","southwest","northwest","northwest","southwest","southeast","northwest","northeast","southwest","southeast","southwest","southwest","northwest","northeast","northeast","northwest","southeast","southwest","southeast","southwest","southwest","northeast","southwest","northeast","northeast","southwest","southeast","southwest","southeast","northwest","northwest","southwest","southwest","southeast","southwest","northwest","northeast","southeast","northeast","northeast","northwest","southwest","northwest","southeast","southwest","southeast","northeast","northwest","southeast","northeast","southeast","southwest","northwest","southeast","southwest","southwest","northeast","northeast","southwest","northwest","southeast","southwest","southwest","southwest","northwest","southeast","southeast","northwest","northeast","southeast","northeast","southeast","southwest","northeast","southwest","northwest","northwest","southwest","southeast","southwest","northeast","northeast","northeast","southeast","northeast","northeast","northwest","southwest","southeast","northeast","northwest","northeast","northeast","northeast","northeast","southwest","northwest","northeast","southwest","southeast","northeast","southwest","northeast","northwest","northeast","northwest","southeast","northwest","northwest","northeast","northwest","southeast","northwest","northeast","southwest","southeast","southwest","southeast","southwest","southwest","southwest","southeast","southeast","southwest","southeast","southeast","southwest","southeast","southeast","southeast","northwest","northwest","northwest","northeast","northeast","northwest","southeast","southwest","northeast","northwest","northeast","northwest","southeast","southwest","southeast","northeast","southwest","northeast","southeast","northwest","southwest","northwest","southwest","southwest","southwest","northeast","northwest","southwest","northeast","southeast","southwest","northeast","southwest","northwest","southeast","northwest","northwest","northeast","southwest","northwest","southeast","northwest","northeast","southeast","northwest","northeast","northeast","southeast","northeast","southwest","northwest","southwest","southwest","northwest","northwest","southwest","southwest"],"y":[4687.8,5209.58,42969.85,9140.95,11737.85,9095.07,8457.82,4134.08,4449.46,19749.38,13616.36,48675.52,18903.49,1526.31,3866.86,44202.65,11848.14,10982.5,1728.9,2104.11,39871.7,45702.02,10141.14,16586.5,9222.4,3579.83,1815.88,8601.33,39556.49,4149.74,6282.23,1628.47,2459.72,13012.21,2416.95,5152.13,8965.8,8116.27,2203.74,18767.74,6455.86,36898.73,43813.87,10704.47,13451.12,7421.19,28950.47,2775.19,40103.89,1712.23,15019.76,28868.66,12032.33,4151.03,4667.61,40904.2,4751.07,2904.09,1694.8,6113.23,3443.06,7345.73,12146.97,2103.08,8116.68,4347.02,5910.94,23807.24,5253.52,1826.84,17560.38,3238.44,5699.84,10461.98,8765.25,8944.12,12925.89,2523.17,11881.97,2128.43,1967.02,3268.85,1744.46,22493.66,4922.92,11163.57,19362.0,6664.69,24671.66,36197.7,2480.98,7371.77,19023.26,6389.38,2395.17,13019.16,1632.56,39722.75,11345.52,8515.76,36837.47,10085.85,12913.99,11362.75,5594.85,3213.62,11455.28,2867.12,52590.83,27533.91,2527.82,10156.78,8551.35,5649.72,5976.83,1759.34,14349.85,13143.34,2927.06,4435.09,6985.51,33471.97,7740.34,13770.1,6289.75,9182.17,1135.94,21659.93,12643.38,38245.59,16657.72,19350.37,13063.88,5272.18,8605.36,5472.45,9391.35,10407.09,3732.63,8068.19,11353.23,49577.66,1880.49,3659.35,6496.89,10601.63,1837.28,6185.32,10269.46,14901.52,45863.21,9288.03,27000.98,14988.43,6600.21,11299.34,7261.74,5425.02,1837.24,7633.72,18955.22,6858.48,19594.81,11944.59,1986.93,13047.33,39774.28,11735.88,34472.84,2497.04,7173.36,11085.59,19496.72,38511.63,9447.25,19798.05,4766.02,3537.7,15006.58,5615.37,6653.79,8891.14,3208.79,30260.0,30063.58,4718.2,5327.4,16577.78,29141.36,11187.66,8334.59,9644.25,18972.49,33907.55,12404.88,8615.3,20781.49,8444.47,18218.16,34828.65,7441.05,5383.54,27037.91,6356.27,12094.48,2473.33,3180.51,16232.85,18963.17,1711.03,1631.82,25678.78,1906.36,21774.32,47896.79,20277.81,8017.06,6500.24,35160.13,46255.11,9869.81,35147.53,4189.11,2304.0,34838.87,1633.96,4992.38,4646.76,8538.29,17043.34,24476.48,34779.61,11015.17,3989.84,11842.44,6082.4,12096.65,3062.51,3378.91,22331.57,1137.47,24520.26,6551.75,4883.87,6373.56,10928.85,12475.35,10355.64,12797.21,2020.18,5377.46,17179.52,18765.88,10043.25,42112.24,15817.99,13747.87,41919.1,40419.02,4561.19,23568.27,8930.93,9861.02,10436.1,20745.99,3021.81,12347.17,20630.28],"py":[5452.2799,5452.2799,45151.253,11303.7327,5452.2799,11303.7327,11303.7327,5452.2799,5452.2799,11303.7327,15311.2136,45151.253,5452.2799,5452.2799,5452.2799,45151.253,11303.7327,11303.7327,5452.2799,5452.2799,38310.2109,45151.253,11303.7327,5452.2799,5452.2799,5452.2799,5452.2799,11303.7327,45151.253,5452.2799,5452.2799,5452.2799,5452.2799,15311.2136,5452.2799,5452.2799,5452.2799,11303.7327,5452.2799,21338.8709,5452.2799,38310.2109,45151.253,11303.7327,15311.2136,11303.7327,21338.8709,5452.2799,38310.2109,5452.2799,15311.2136,21338.8709,11303.7327,5452.2799,5452.2799,38310.2109,5452.2799,5452.2799,5452.2799,5452.2799,5452.2799,11303.7327,15311.2136,5452.2799,11303.7327,5452.2799,5452.2799,21338.8709,5452.2799,5452.2799,21338.8709,5452.2799,5452.2799,11303.7327,11303.7327,11303.7327,15311.2136,5452.2799,11303.7327,5452.2799,5452.2799,5452.2799,5452.2799,5452.2799,5452.2799,11303.7327,21338.8709,5452.2799,5452.2799,38310.2109,5452.2799,5452.2799,21338.8709,5452.2799,5452.2799,11303.7327,5452.2799,38310.2109,11303.7327,11303.7327,38310.2109,11303.7327,15311.2136,11303.7327,5452.2799,5452.2799,11303.7327,5452.2799,45151.253,21338.8709,5452.2799,11303.7327,11303.7327,5452.2799,5452.2799,5452.2799,15311.2136,15311.2136,5452.2799,5452.2799,5452.2799,11303.7327,11303.7327,15311.2136,5452.2799,11303.7327,5452.2799,21338.8709,11303.7327,21338.8709,21338.8709,21338.8709,15311.2136,5452.2799,11303.7327,5452.2799,11303.7327,11303.7327,5452.2799,11303.7327,11303.7327,45151.253,5452.2799,5452.2799,5452.2799,11303.7327,5452.2799,5452.2799,11303.7327,15311.2136,45151.253,11303.7327,15311.2136,15311.2136,5452.2799,11303.7327,5452.2799,5452.2799,5452.2799,11303.7327,5452.2799,5452.2799,21338.8709,11303.7327,5452.2799,11303.7327,38310.2109,11303.7327,38310.2109,5452.2799,5452.2799,11303.7327,5452.2799,38310.2109,11303.7327,21338.8709,5452.2799,5452.2799,21338.8709,5452.2799,5452.2799,11303.7327,5452.2799,15311.2136,11303.7327,5452.2799,5452.2799,21338.8709,21338.8709,11303.7327,11303.7327,11303.7327,21338.8709,38310.2109,5452.2799,11303.7327,11303.7327,11303.7327,5452.2799,38310.2109,11303.7327,5452.2799,21338.8709,5452.2799,11303.7327,5452.2799,5452.2799,21338.8709,5452.2799,5452.2799,5452.2799,21338.8709,5452.2799,21338.8709,45151.253,5452.2799,5452.2799,5452.2799,11303.7327,45151.253,11303.7327,21338.8709,5452.2799,5452.2799,38310.2109,5452.2799,5452.2799,5452.2799,5452.2799,21338.8709,11303.7327,38310.2109,11303.7327,5452.2799,11303.7327,5452.2799,11303.7327,5452.2799,5452.2799,21338.8709,5452.2799,21338.8709,5452.2799,5452.2799,5452.2799,11303.7327,11303.7327,11303.7327,11303.7327,5452.2799,5452.2799,21338.8709,21338.8709,11303.7327,38310.2109,21338.8709,21338.8709,45151.253,38310.2109,5452.2799,21338.8709,11303.7327,11303.7327,11303.7327,21338.8709,5452.2799,15311.2136,11303.7327]}};
+
+
+const NODES=D.nodes;
+function enc(r){return {age:+r.age,bmi:+r.bmi,children:+r.children,sex_male:r.sex==='male'?1:0,smoker_yes:r.smoker==='yes'?1:0,
+ region_northwest:r.region==='northwest'?1:0,region_southeast:r.region==='southeast'?1:0,region_southwest:r.region==='southwest'?1:0}}
+function quote(r){const x=enc(r);let i=0;const path=[];while(NODES[i].left!==null){const n=NODES[i];const le=x[n.feature]<=n.threshold;path.push([n.feature,n.threshold,le]);i=le?n.left:n.right}return {v:NODES[i].value,path}}
+const NAME={age:'나이',bmi:'BMI',children:'자녀',smoker_yes:'흡연',sex_male:'성별',region_northwest:'northwest',region_southeast:'southeast',region_southwest:'southwest'};
+function stepTxt(f,t,le){if(f==='smoker_yes')return le?'비흡연자':'흡연자';if(f==='sex_male')return le?'여성':'남성';if(f.startsWith('region_'))return (le?'지역 ≠ ':'지역 = ')+NAME[f];return NAME[f]+(le?' ≤ ':' > ')+(+t.toFixed(2))}
+function calc(){const r={age:document.getElementById('in-age').value,sex:document.getElementById('in-sex').value,bmi:document.getElementById('in-bmi').value,children:document.getElementById('in-ch').value,smoker:document.getElementById('in-smk').value,region:document.getElementById('in-reg').value};
+ if(r.age===''||r.bmi===''||r.children===''){robo('robo-6','confused');document.getElementById('q-cap').textContent='나이 · BMI · 자녀 수를 숫자로 넣어 주세요.';return}
+ const q=quote(r);document.getElementById('q-path').innerHTML=q.path.map(p=>'<span>'+stepTxt(...p)+'</span>').join('→')+'→<span class="leaf">'+fmtD(q.v,2)+'</span>';
+ document.getElementById('q-quote').textContent=fmtD(q.v,2);document.getElementById('q-res').textContent=fmtD(q.v*(1+D.k),2);
+ const out=(+r.age<18||+r.age>64||+r.bmi<15.96||+r.bmi>53.13||+r.children>5);
+ document.getElementById('q-cap').textContent='질문 '+q.path.length+'개를 거쳐 견적이 나왔습니다. 성별 · 지역 · 자녀 수는 이 규칙표의 질문에 없습니다.'+(out?' ⚠ 입력이 학습 데이터 범위(나이 18~64, BMI 15.96~53.13, 자녀 0~5) 밖입니다. 규칙표는 가장 가까운 잎의 금액을 그대로 줍니다.':'');
+ robo('robo-6','thinking');setTimeout(()=>robo('robo-6','idle'),250)}
+['in-age','in-sex','in-bmi','in-ch','in-smk','in-reg'].forEach(id=>{document.getElementById(id).addEventListener('input',calc);document.getElementById(id).addEventListener('change',calc)});
+calc();
+// ---------- CSV ----------
+let LAST='';
+function parseCSV(t){const L=t.replace(/\r/g,'').split('\n').filter(s=>s.trim());const h=L[0].split(',').map(s=>s.trim().toLowerCase());return L.slice(1).map(l=>{const v=l.split(',');const o={};h.forEach((k,i)=>o[k]=(v[i]||'').trim());return o})}
+function runCSV(rows){const need=['age','sex','bmi','children','smoker','region'];const cap=document.getElementById('csv-cap');
+ if(!rows.length||need.some(k=>!(k in rows[0]))){cap.textContent='필요한 열이 없습니다: '+need.filter(k=>!rows.length||!(k in rows[0])).join(', ')+'. 첫 줄에 열 이름을 넣어 주세요.';document.getElementById('csv-t').innerHTML='';return}
+ const hasY='charges' in rows[0];let big=0;const outL=['age,sex,bmi,children,smoker,region,quote,reserve'];
+ const body=rows.map((r,i)=>{const q=quote(r).v,res=q*(1+D.k);outL.push([r.age,r.sex,r.bmi,r.children,r.smoker,r.region,q.toFixed(2),res.toFixed(2)].join(','));
+  const y=hasY?+r.charges:null;const bu=hasY&&(y-res)>10000;if(bu)big++;
+  return i<100?'<tr><td class="r">'+(i+1)+'</td><td class="r">'+r.age+'</td><td>'+r.sex+'</td><td class="r">'+r.bmi+'</td><td class="r">'+r.children+'</td><td>'+r.smoker+'</td><td>'+r.region+'</td><td class="r">'+fmtD(q,2)+'</td><td class="r">'+fmtD(res,2)+'</td>'+(hasY?'<td class="r'+(bu?' under':'')+'">'+fmtD(y,2)+'</td>':'')+'</tr>':''}).join('');
+ document.getElementById('csv-t').innerHTML='<thead><tr><th class="r">#</th><th class="r">age</th><th>sex</th><th class="r">bmi</th><th class="r">children</th><th>smoker</th><th>region</th><th class="r">견적</th><th class="r">적립 권장액</th>'+(hasY?'<th class="r">실제</th>':'')+'</tr></thead><tbody>'+body+'</tbody>';
+ LAST=outL.join('\n');document.getElementById('csv-save').disabled=false;
+ cap.textContent=rows.length+'명 견적 완료'+(rows.length>100?' (표는 처음 100명만)':'')+'.'+(hasY?' 실제보다 $10,000 넘게 적게 잡은 사람 '+big+'명(주황).':'')}
+function readFile(f){const fr=new FileReader();fr.onload=()=>{try{runCSV(parseCSV(String(fr.result)))}catch(e){document.getElementById('csv-cap').textContent='CSV 를 읽지 못했습니다. 쉼표로 나뉜 글자 파일인지 확인해 주세요.'}};fr.readAsText(f)}
+const drop=document.getElementById('drop');
+['dragenter','dragover'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.add('on')}));
+['dragleave','drop'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.remove('on')}));
+drop.addEventListener('drop',e=>{const f=e.dataTransfer&&e.dataTransfer.files[0];if(f)readFile(f)});
+document.getElementById('csv-in').addEventListener('change',e=>{const f=e.target.files[0];if(f)readFile(f)});
+document.getElementById('csv-sample').addEventListener('click',()=>{const T=D.te;const rows=[];for(let i=0;i<10;i++)rows.push({age:T.age[i],sex:T.sex[i],bmi:T.bmi[i],children:T.children[i],smoker:T.smoker[i],region:T.region[i],charges:T.y[i]});runCSV(rows)});
+document.getElementById('csv-save').addEventListener('click',()=>{if(LAST)saveFile('quotes.csv',LAST,'text/csv')});
+// ---------- 일괄 검증 ----------
+document.getElementById('v-run').addEventListener('click',()=>{const T=D.te,n=T.y.length;let mis=0,mx=0,big=0;const rows=[];
+ for(let i=0;i<n;i++){const r={age:T.age[i],sex:T.sex[i],bmi:T.bmi[i],children:T.children[i],smoker:T.smoker[i],region:T.region[i]};const q=quote(r).v;const d=Math.abs(q-T.py[i]);if(d>0.01)mis++;if(d>mx)mx=d;
+  const res=q*(1+D.k);const gap=T.y[i]-res;if(gap>10000){big++;rows.push([i+1,r,q,res,T.y[i],gap])}}
+ document.getElementById('v-res').textContent='불일치 '+mis+'명 / '+n+'명';
+ document.getElementById('v-cap').textContent='페이지 안 JS 규칙 견적 vs 노트북 sklearn 대리모델 예측. 최대 차이 '+fmtD(mx,4)+'(규칙 JSON 은 소수 둘째 자리까지 저장). 아래는 적립 권장액보다 실제가 $10,000 넘게 큰 '+big+'명.';
+ document.getElementById('v-t').innerHTML='<thead><tr><th class="r">#</th><th class="r">나이</th><th class="r">BMI</th><th>흡연</th><th class="r">견적</th><th class="r">적립 권장액</th><th class="r">실제</th><th class="r">부족</th></tr></thead><tbody>'+rows.map(x=>'<tr><td class="r">'+x[0]+'</td><td class="r">'+x[1].age+'</td><td class="r">'+x[1].bmi+'</td><td>'+x[1].smoker+'</td><td class="r">'+fmtD(x[2],2)+'</td><td class="r">'+fmtD(x[3],2)+'</td><td class="r">'+fmtD(x[4],2)+'</td><td class="r under">'+fmtD(x[5])+'</td></tr>').join('')+'</tbody>';
+ robo('robo-6',mis===0?'success':'wrong')});
+</script>
+</body>
+</html>

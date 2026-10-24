@@ -1,0 +1,121 @@
+{
+ "model": "surrogate of GradientBoostingRegressor({'n_estimators': 200, 'max_depth': 3, 'learning_rate': 0.05, 'random_state': 42})",
+ "leaves": 6,
+ "columns": [
+  "age",
+  "bmi",
+  "children",
+  "sex_male",
+  "smoker_yes",
+  "region_northwest",
+  "region_southeast",
+  "region_southwest"
+ ],
+ "features_used": [
+  "age",
+  "bmi",
+  "smoker_yes"
+ ],
+ "nodes": [
+  {
+   "id": 0,
+   "feature": "smoker_yes",
+   "threshold": 0.5,
+   "left": 1,
+   "right": 2,
+   "value": 13250.14,
+   "n": 1069
+  },
+  {
+   "id": 1,
+   "feature": "age",
+   "threshold": 42.5,
+   "left": 5,
+   "right": 6,
+   "value": 8490.98,
+   "n": 855
+  },
+  {
+   "id": 2,
+   "feature": "bmi",
+   "threshold": 30.01,
+   "left": 3,
+   "right": 4,
+   "value": 32264.53,
+   "n": 214
+  },
+  {
+   "id": 3,
+   "feature": null,
+   "threshold": null,
+   "left": null,
+   "right": null,
+   "value": 21338.87,
+   "n": 98
+  },
+  {
+   "id": 4,
+   "feature": "age",
+   "threshold": 41.5,
+   "left": 7,
+   "right": 8,
+   "value": 41494.83,
+   "n": 116
+  },
+  {
+   "id": 5,
+   "feature": null,
+   "threshold": null,
+   "left": null,
+   "right": null,
+   "value": 5452.28,
+   "n": 474
+  },
+  {
+   "id": 6,
+   "feature": "age",
+   "threshold": 58.5,
+   "left": 9,
+   "right": 10,
+   "value": 12271.42,
+   "n": 381
+  },
+  {
+   "id": 7,
+   "feature": null,
+   "threshold": null,
+   "left": null,
+   "right": null,
+   "value": 38310.21,
+   "n": 62
+  },
+  {
+   "id": 8,
+   "feature": null,
+   "threshold": null,
+   "left": null,
+   "right": null,
+   "value": 45151.25,
+   "n": 54
+  },
+  {
+   "id": 9,
+   "feature": null,
+   "threshold": null,
+   "left": null,
+   "right": null,
+   "value": 11303.73,
+   "n": 289
+  },
+  {
+   "id": 10,
+   "feature": null,
+   "threshold": null,
+   "left": null,
+   "right": null,
+   "value": 15311.21,
+   "n": 92
+  }
+ ],
+ "note": "trained on train-set GBM predictions (1,069 rows, split.csv). value = quote in USD."
+}
